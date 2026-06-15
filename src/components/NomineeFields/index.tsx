@@ -1,5 +1,7 @@
 import Select from '../Select';
 import { RELATIONS } from '../../types';
+import { useEffect, useState } from 'react';
+import { getRelations } from '../../services/api';
 
 export interface NomineeFieldValues {
   nomineeName: string;
@@ -57,9 +59,35 @@ const YEAR_OPTIONS = Array.from({ length: 60 }, (_, i) => {
   return { value: yr, label: yr };
 });
 
-export default function NomineeFields({ values, errors, onChange, showName = true }: Props) {
+export default function NomineeFields({
+  values,
+  errors,
+  onChange,
+  showName = true,
+}: Props) {
+  const [relationOptions, setRelationOptions] = useState<
+    { value: string; label: string }[]
+  >([]);
+
+  useEffect(() => {
+    const loadRelations = async () => {
+      try {
+        const data = await getRelations();
+        setRelationOptions(data);
+      } catch (error) {
+        console.error('Failed to load relations:', error);
+      }
+    };
+
+    loadRelations();
+  }, []);
+
+
+
   const minor = isMinor(values.nomineeDob);
   const age = calcAge(values.nomineeDob);
+
+
 
   return (
     <>
@@ -102,7 +130,7 @@ export default function NomineeFields({ values, errors, onChange, showName = tru
           className={errors.relation ? 'is-error' : ''}
           value={values.relation}
           placeholder="Select relationship"
-          options={RELATION_OPTIONS}
+          options={relationOptions}
           onChange={v => onChange('relation', v)}
         />
         {errors.relation && <p className="form-error">⚠ {errors.relation}</p>}

@@ -6,6 +6,7 @@ import NomineeFields, { type NomineeFieldValues, type NomineeFieldErrors, valida
 import { useFlow } from '../../context/FlowContext';
 import { useRedirectHome } from '../../hooks/useRedirectHome';
 import { SAVING_ACCOUNTS } from '../../types';
+import { getAccounts, type AccountOption } from '../../services/api';
 
 type Scheme = 'PMJJBY' | 'PMSBY' | 'PMAPY';
 type NomineeSource = 'existing' | 'new';
@@ -63,6 +64,8 @@ export default function PMSocial() {
     setNomineeErrors(e => ({ ...e, [k]: '' }));
   };
 
+  const [accountNo, setAccountNo] = useState('');
+
   const validateForm = () => {
     const e: Record<string, string> = {};
     if (!savingAccount) e.savingAccount = 'Please select a savings account';
@@ -79,7 +82,33 @@ export default function PMSocial() {
     return true;
   };
 
-  const acc = SAVING_ACCOUNTS.find(a => a.value === savingAccount);
+  //const acc = SAVING_ACCOUNTS.find(a => a.value === savingAccount);
+
+  const [accounts, setAccounts] = useState<AccountOption[]>([]);
+  
+     useEffect(() => {
+        const loadAccounts = async () => {
+          try {
+            const data = await getAccounts();
+            console.log('Accounts:', data);
+            setAccounts(data);
+            console.log('Accounts state updated:', accounts);
+          } catch (error) {
+            console.error('Failed to load accounts:', error);
+          }
+        };
+    
+        loadAccounts();
+      }, []);
+    
+      const acc = accounts.find(a => a.value === accountNo);
+      const maskedAccounts = accounts.map(acc => ({
+        ...acc,
+        label:
+          acc.value.length > 4
+            ? '*'.repeat(acc.value.length - 4) + acc.value.slice(-4)
+            : acc.value,
+      }));
 
   /* ── SUCCESS ── */
   if (step === 'success') return (
@@ -167,7 +196,7 @@ export default function PMSocial() {
           <div className="form-group">
             <label className="form-label">Debit Savings Account <span className="required">*</span></label>
             <div className="radio-group">
-              {SAVING_ACCOUNTS.map(a => (
+              {maskedAccounts.map(a => (
                 <label key={a.value} className={`radio-option ${savingAccount === a.value ? 'selected' : ''}`}>
                   <input type="radio" name="account" checked={savingAccount === a.value}
                     onChange={() => { setSavingAccount(a.value); setFormErrors(e => ({ ...e, savingAccount: '' })); }} />

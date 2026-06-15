@@ -3,6 +3,7 @@ import { useFlow } from '../../context/FlowContext';
 import { useRedirectHome, useGoHome } from '../../hooks/useRedirectHome';
 import Select from '../../components/Select';
 import { Stepper, Actions } from '../../components/ServiceShell';
+import { getAccounts, type AccountOption } from '../../services/api';
 
 type Mode = 'entry' | 'view';
 type Step = 'select' | 'form' | 'confirm' | 'otp' | 'success';
@@ -33,6 +34,8 @@ function OtpBoxes({ onComplete }: { onComplete: () => void }) {
   const [verifying, setVerifying] = useState(false);
   const [resendMsg, setResendMsg] = useState('');
   const refs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)];
+
+  
 
   const handleInput = (i: number, val: string) => {
     const clean = val.replace(/\D/g, '').slice(-1);
@@ -104,6 +107,7 @@ export default function PPS() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
   const [refNo] = useState(() => 'PPS' + Date.now().toString().slice(-8));
+  const [accountNo, setAccountNo] = useState('');
   const goHome = useGoHome();
   useRedirectHome(step === 'success');
 
@@ -116,6 +120,32 @@ export default function PPS() {
     setForm(f => ({ ...f, [k]: v }));
     setErrors(e => ({ ...e, [k]: '' }));
   };
+
+  const [accounts, setAccounts] = useState<AccountOption[]>([]);
+
+   useEffect(() => {
+      const loadAccounts = async () => {
+        try {
+          const data = await getAccounts();
+          console.log('Accounts:', data);
+          setAccounts(data);
+          console.log('Accounts state updated:', accounts);
+        } catch (error) {
+          console.error('Failed to load accounts:', error);
+        }
+      };
+  
+      loadAccounts();
+    }, []);
+  
+    const acc = accounts.find(a => a.value === accountNo);
+    const maskedAccounts = accounts.map(acc => ({
+      ...acc,
+      label:
+        acc.value.length > 4
+          ? '*'.repeat(acc.value.length - 4) + acc.value.slice(-4)
+          : acc.value,
+    }));
 
   const validate = (): boolean => {
     const e: FormErrors = {};
@@ -249,7 +279,7 @@ export default function PPS() {
               className={errors.accountNo ? 'is-error' : ''}
               value={form.accountNo}
               placeholder="Select account"
-              options={PPS_ACCOUNTS}
+              options={maskedAccounts}
               onChange={v => setField('accountNo', v)}
             />
             {errors.accountNo && <p className="ferr">⚠ {errors.accountNo}</p>}
