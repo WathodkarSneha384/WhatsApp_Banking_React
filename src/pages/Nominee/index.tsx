@@ -3,10 +3,10 @@ import OTPInput from '../../components/OTPInput';
 import Select from '../../components/Select';
 import { Actions } from '../../components/ServiceShell';
 import NomineeFields, { type NomineeFieldValues, type NomineeFieldErrors, validateNomineeFields } from '../../components/NomineeFields';
+import { formatDDMMYYYY } from '../../utils/date';
 import { useFlow } from '../../context/FlowContext';
 import { useRedirectHome } from '../../hooks/useRedirectHome';
-import { SAVING_ACCOUNTS } from '../../types';
-import { getAccounts, type AccountOption } from '../../services/api';
+import { useAccounts } from '../../hooks/useAccounts';
 
 type NomineeType = 'new' | 'update';
 type Step = 'select' | 'otp' | 'form' | 'confirm' | 'success';
@@ -18,11 +18,10 @@ const EMPTY_NOMINEE: NomineeFieldValues = {
 };
 
 export default function Nominee() {
-  const { setCurrentStep } = useFlow();
+  const { setCurrentStep, customer } = useFlow();
   const [accountNo, setAccountNo] = useState('');
   const [type, setType] = useState<NomineeType | null>(null);
   const [step, setStep] = useState<Step>('select');
-  useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step]);
   const [nominee, setNominee] = useState<NomineeFieldValues>(EMPTY_NOMINEE);
   const [nomineeErrors, setNomineeErrors] = useState<NomineeFieldErrors>({});
   const [selectErrors, setSelectErrors] = useState({ accountNo: '', type: '' });
@@ -30,7 +29,9 @@ export default function Nominee() {
   const [refNo] = useState(() => 'NOM' + Date.now().toString().slice(-8));
   useRedirectHome(step === 'success');
 
-  const [accounts, setAccounts] = useState<AccountOption[]>([]);
+  const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
+
+  useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step, setCurrentStep]);
 
   const setNomineeField = (k: keyof NomineeFieldValues, v: string) => {
     setNominee(n => ({ ...n, [k]: v }));
@@ -51,29 +52,7 @@ export default function Nominee() {
     return Object.keys(e).length === 0;
   };
 
-  useEffect(() => {
-    const loadAccounts = async () => {
-      try {
-        const data = await getAccounts();
-        console.log('Accounts:', data);
-        setAccounts(data);
-        console.log('Accounts state updated:', accounts);
-      } catch (error) {
-        console.error('Failed to load accounts:', error);
-      }
-    };
-
-    loadAccounts();
-  }, []);
-
   const acc = accounts.find(a => a.value === accountNo);
-  const maskedAccounts = accounts.map(acc => ({
-    ...acc,
-    label:
-      acc.value.length > 4
-        ? '*'.repeat(acc.value.length - 4) + acc.value.slice(-4)
-        : acc.value,
-  }));
 
   /* ── SUCCESS ── */
   if (step === 'success') return (
@@ -109,12 +88,13 @@ export default function Nominee() {
             className={selectErrors.accountNo ? 'is-error' : ''}
             value={accountNo}
             placeholder="Select account"
-            options={maskedAccounts}
+            options={accounts}
             onChange={v => {
               setAccountNo(v);
               setSelectErrors(s => ({ ...s, accountNo: '' }));
             }}
           />
+          {accountsLoading && <p className="form-hint">Loading accounts…</p>}
           {selectErrors.accountNo && <p className="form-error">⚠ {selectErrors.accountNo}</p>}
         </div>
 
@@ -154,7 +134,7 @@ export default function Nominee() {
     <>      <div className="flow-content">
       <div className="card otp-screen">
         <div className="card-title" style={{ justifyContent: 'center' }}><span className="card-icon">📱</span>OTP Verification</div>
-        <p className="otp-subtitle">Enter the 4-digit OTP sent to your registered mobile number to proceed with nominee {type === 'new' ? 'registration' : 'update'}</p>
+        <p className="otp-subtitle">Enter the 6-digit OTP sent to your registered mobile number to proceed with nominee {type === 'new' ? 'registration' : 'update'}</p>
         <OTPInput onComplete={() => {
           setLoading(true);
           setTimeout(() => { setLoading(false); setStep('form'); }, 1000);
@@ -216,7 +196,7 @@ export default function Nominee() {
           {isMinorNominee && <>
             <div className="divider" />
             <div className="summary-row"><span className="summary-key">Guardian Name</span><span className="summary-val">{nominee.guardianName}</span></div>
-            <div className="summary-row"><span className="summary-key">Guardian DOB Year</span><span className="summary-val">{nominee.guardianDob}</span></div>
+            <div className="summary-row"><span className="summary-key">Guardian Date of Birth</span><span className="summary-val">{formatDDMMYYYY(nominee.guardianDob)}</span></div>
             <div className="summary-row"><span className="summary-key">Guardian Relation</span><span className="summary-val">{nominee.guardianRelation}</span></div>
           </>}
         </div>

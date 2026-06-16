@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { clearSessionTimer } from './useSessionTimeout';
 
 export const HOME_REDIRECT_MS = 3000;
 
@@ -8,12 +9,18 @@ export function useRedirectHome(active: boolean, delay = HOME_REDIRECT_MS) {
 
   useEffect(() => {
     if (!active) return;
-    const timer = setTimeout(() => navigate('/', { replace: true }), delay);
+    const timer = setTimeout(() => {
+      clearSessionTimer();
+      navigate('/', { replace: true });
+    }, delay);
     return () => clearTimeout(timer);
   }, [active, delay, navigate]);
 }
 
 export function useGoHome() {
   const navigate = useNavigate();
-  return () => navigate('/', { replace: true });
+  return () => {
+    clearSessionTimer();
+    navigate('/', { replace: true });
+  };
 }

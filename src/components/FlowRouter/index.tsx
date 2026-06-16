@@ -2,6 +2,8 @@ import type { ComponentType } from 'react';
 import { lazy, Suspense } from 'react';
 import type { ServiceType } from '../../types';
 import { useServiceFlow } from '../../hooks/useServiceFlow';
+import { useSessionTimeout } from '../../hooks/useSessionTimeout';
+import { usePrefetchServiceData } from '../../hooks/usePrefetchServiceData';
 import { FlowProvider } from '../../context/FlowContext';
 import ServiceShell from '../ServiceShell';
 import ErrorPage from '../ErrorPage';
@@ -48,7 +50,7 @@ const serviceRoutes: Record<ServiceType, ServiceConfig> = {
     label: 'PM Social Schemes',
     title: 'PM Social Scheme Enrollment',
     subtitle: 'PM Social Scheme Enrollment',
-    steps: ['Select Scheme', 'Fill Details', 'Review', 'Verify OTP', 'Done'],
+    steps: ['Fill Details', 'Review', 'Verify OTP', 'Done'],
     icon: '🏛️',
     desc: 'Enroll in government insurance and pension schemes at very low premiums.',
   },
@@ -83,7 +85,9 @@ function LoadingView() {
 }
 
 export default function FlowRouter() {
-  const { service, status, error } = useServiceFlow();
+  const { service, subservice, status, error, customerId, mobileNo, customerName } = useServiceFlow();
+  useSessionTimeout(status === 'ready');
+  usePrefetchServiceData(status === 'ready', service, subservice, customerId);
 
   if (status === 'loading') return <LoadingView />;
 
@@ -115,7 +119,14 @@ export default function FlowRouter() {
   const FlowComponent = config.component;
 
   return (
-    <FlowProvider>
+    <FlowProvider
+      subservice={subservice}
+      customer={{
+        customerId: customerId ?? '',
+        mobileNo: mobileNo ?? '',
+        customerName: customerName ?? '',
+      }}
+    >
       <ServiceShell
         title={config.title}
         description={config.desc}

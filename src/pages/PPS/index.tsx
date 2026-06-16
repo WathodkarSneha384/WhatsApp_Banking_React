@@ -3,7 +3,10 @@ import { useFlow } from '../../context/FlowContext';
 import { useRedirectHome, useGoHome } from '../../hooks/useRedirectHome';
 import Select from '../../components/Select';
 import { Stepper, Actions } from '../../components/ServiceShell';
-import { getAccounts, type AccountOption } from '../../services/api';
+import { useAccounts } from '../../hooks/useAccounts';
+import { usePPSParameters } from '../../hooks/usePPSParameters';
+import { createPPSChequeEntry, sendOtp, validateOtp } from '../../services/api';
+import { minIssueDate, toInputDate } from '../../utils/date';
 
 type Mode = 'entry' | 'view';
 type Step = 'select' | 'form' | 'confirm' | 'otp' | 'success';
@@ -19,33 +22,33 @@ interface EntryForm {
 const ENTRY_STEPS = ['Select Service', 'Enter Details', 'Review', 'Verify OTP', 'Done'];
 const VIEW_STEPS = ['Select Service', 'Search', 'Result'];
 
-const PPS_ACCOUNTS = [
-  { value: 'SB001', label: 'Savings A/c ••6402 — ₹42,318.50' },
-  { value: 'SB002', label: 'Savings A/c ••8817 — ₹1,08,940.00' },
-  { value: 'CA001', label: 'Current A/c ••3320 — ₹5,67,210.75' },
-];
-
 const STEP_NUM: Record<Step, number> = { select: 1, form: 2, confirm: 3, otp: 4, success: 5 };
 
 type FormErrors = Partial<Record<keyof EntryForm, string>>;
 
-function OtpBoxes({ onComplete }: { onComplete: () => void }) {
-  const [digits, setDigits] = useState(['', '', '', '']);
+function OtpBoxes({
+  onComplete,
+  disabled,
+}: {
+  onComplete: (otp: string) => void | Promise<void>;
+  disabled?: boolean;
+}) {
+  const OTP_LENGTH = 6;
+  const [digits, setDigits] = useState(Array(OTP_LENGTH).fill(''));
   const [verifying, setVerifying] = useState(false);
   const [resendMsg, setResendMsg] = useState('');
-  const refs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)];
-
-  
+  const refs = Array.from({ length: OTP_LENGTH }, () => useRef<HTMLInputElement>(null));
 
   const handleInput = (i: number, val: string) => {
+    if (disabled || verifying) return;
     const clean = val.replace(/\D/g, '').slice(-1);
     const next = [...digits];
     next[i] = clean;
     setDigits(next);
-    if (clean && i < 3) refs[i + 1].current?.focus();
+    if (clean && i < OTP_LENGTH - 1) refs[i + 1].current?.focus();
     if (next.every(d => d)) {
       setVerifying(true);
-      setTimeout(onComplete, 1100);
+      Promise.resolve(onComplete(next.join(''))).finally(() => setVerifying(false));
     }
   };
 
@@ -54,14 +57,14 @@ function OtpBoxes({ onComplete }: { onComplete: () => void }) {
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, OTP_LENGTH);
     if (!pasted) return;
     e.preventDefault();
-    const next = pasted.split('').concat(['', '', '', '']).slice(0, 4);
+    const next = pasted.split('').concat(Array(OTP_LENGTH).fill('')).slice(0, OTP_LENGTH);
     setDigits(next);
-    if (pasted.length === 4) {
+    if (pasted.length === OTP_LENGTH) {
       setVerifying(true);
-      setTimeout(onComplete, 1100);
+      Promise.resolve(onComplete(pasted)).finally(() => setVerifying(false));
     }
   };
 
@@ -71,7 +74,7 @@ function OtpBoxes({ onComplete }: { onComplete: () => void }) {
         <span className="ic">📱</span>OTP Verification
       </div>
       <p className="card-sub" style={{ marginBottom: 0 }}>
-        Enter the 4-digit OTP sent to your registered mobile number ••210
+        Enter the 6-digit OTP sent to your registered mobile number ••210
       </p>
       <div className="otp-boxes">
         {digits.map((d, i) => (
@@ -82,7 +85,7 @@ function OtpBoxes({ onComplete }: { onComplete: () => void }) {
             inputMode="numeric"
             aria-label={`OTP digit ${i + 1}`}
             value={d}
-            disabled={verifying}
+            disabled={verifying || disabled}
             onChange={e => handleInput(i, e.target.value)}
             onKeyDown={e => handleKey(i, e)}
             onPaste={i === 0 ? handlePaste : undefined}
@@ -99,17 +102,20 @@ function OtpBoxes({ onComplete }: { onComplete: () => void }) {
 }
 
 export default function PPS() {
-  const { setCurrentStep } = useFlow();
+  const { setCurrentStep, customer } = useFlow();
   const [mode, setMode] = useState<Mode | null>(null);
   const [step, setStep] = useState<Step>('select');
   const [form, setForm] = useState<EntryForm>({ accountNo: '', chequeNo: '', chequeAmount: '', issueDate: '', payeeName: '' });
   const [viewChequeNo, setViewChequeNo] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
-  const [refNo] = useState(() => 'PPS' + Date.now().toString().slice(-8));
-  const [accountNo, setAccountNo] = useState('');
+  const [apiError, setApiError] = useState('');
+  const [refNo, setRefNo] = useState('');
   const goHome = useGoHome();
   useRedirectHome(step === 'success');
+
+  const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
+  const { params: ppsParams } = usePPSParameters();
 
   const stepLabels = mode === 'view' ? VIEW_STEPS : ENTRY_STEPS;
   const curStep = STEP_NUM[step];
@@ -121,40 +127,39 @@ export default function PPS() {
     setErrors(e => ({ ...e, [k]: '' }));
   };
 
-  const [accounts, setAccounts] = useState<AccountOption[]>([]);
-
-   useEffect(() => {
-      const loadAccounts = async () => {
-        try {
-          const data = await getAccounts();
-          console.log('Accounts:', data);
-          setAccounts(data);
-          console.log('Accounts state updated:', accounts);
-        } catch (error) {
-          console.error('Failed to load accounts:', error);
-        }
-      };
-  
-      loadAccounts();
-    }, []);
-  
-    const acc = accounts.find(a => a.value === accountNo);
-    const maskedAccounts = accounts.map(acc => ({
-      ...acc,
-      label:
-        acc.value.length > 4
-          ? '*'.repeat(acc.value.length - 4) + acc.value.slice(-4)
-          : acc.value,
-    }));
+  const selectedAccount = accounts.find(a => a.value === form.accountNo);
 
   const validate = (): boolean => {
     const e: FormErrors = {};
     if (!form.accountNo) e.accountNo = 'Please select an account';
     if (!form.chequeNo.trim()) e.chequeNo = 'Cheque number is required';
     else if (!/^\d{6}$/.test(form.chequeNo.trim())) e.chequeNo = 'Cheque number must be 6 digits';
+
     const n = Number(form.chequeAmount);
-    if (!form.chequeAmount.trim() || isNaN(n) || n <= 0) e.chequeAmount = 'Enter a valid amount';
-    if (!form.issueDate) e.issueDate = 'Issue date is required';
+    if (!form.chequeAmount.trim() || isNaN(n) || n <= 0) {
+      e.chequeAmount = 'Enter a valid amount';
+    } else if (ppsParams) {
+      if (n < ppsParams.minChequeAmount) {
+        e.chequeAmount = `Minimum cheque amount is ₹${ppsParams.minChequeAmount.toLocaleString('en-IN')}`;
+      } else if (n > ppsParams.maxChequeAmount) {
+        e.chequeAmount = `Maximum cheque amount is ₹${ppsParams.maxChequeAmount.toLocaleString('en-IN')}`;
+      }
+    }
+
+    if (!form.issueDate) {
+      e.issueDate = 'Issue date is required';
+    } else {
+      const issue = new Date(form.issueDate);
+      issue.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const oldest = new Date(today);
+      oldest.setMonth(oldest.getMonth() - 3);
+
+      if (issue > today) e.issueDate = 'Issue date cannot be in the future';
+      else if (issue < oldest) e.issueDate = 'Issue date cannot be more than 3 months old';
+    }
+
     if (!form.payeeName.trim()) e.payeeName = 'Payee name is required';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -169,9 +174,37 @@ export default function PPS() {
     setLoading(false);
   };
 
-  const sendOtp = () => {
+  const sendOtpAndProceed = async () => {
     setLoading(true);
-    setTimeout(() => { setLoading(false); setStep('otp'); }, 900);
+    setApiError('');
+    try {
+      await sendOtp(customer.mobileNo, 'PPSCREATE');
+      setStep('otp');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpComplete = async (otp: string) => {
+    setApiError('');
+    try {
+      await validateOtp(customer.mobileNo, otp, 'PPSCREATE');
+      await createPPSChequeEntry({
+        accountNo: form.accountNo,
+        chequeNo: Number(form.chequeNo),
+        chequeAmount: Number(form.chequeAmount),
+        payeeName: form.payeeName.trim(),
+        issueDate: form.issueDate,
+        mobileNo: customer.mobileNo,
+      });
+      setRefNo('PPS' + Date.now().toString().slice(-8));
+      setStep('success');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Verification failed');
+      throw err;
+    }
   };
 
   const renderView = () => {
@@ -279,9 +312,10 @@ export default function PPS() {
               className={errors.accountNo ? 'is-error' : ''}
               value={form.accountNo}
               placeholder="Select account"
-              options={maskedAccounts}
+              options={accounts}
               onChange={v => setField('accountNo', v)}
             />
+            {accountsLoading && <p className="fhint">Loading accounts…</p>}
             {errors.accountNo && <p className="ferr">⚠ {errors.accountNo}</p>}
           </div>
           <div className="section-label">Cheque information</div>
@@ -310,6 +344,11 @@ export default function PPS() {
                 value={form.chequeAmount}
                 onChange={e => setField('chequeAmount', e.target.value)}
               />
+              {ppsParams && (
+                <p className="fhint">
+                  Allowed range: ₹{ppsParams.minChequeAmount.toLocaleString('en-IN')} – ₹{ppsParams.maxChequeAmount.toLocaleString('en-IN')}
+                </p>
+              )}
               {errors.chequeAmount && <p className="ferr">⚠ {errors.chequeAmount}</p>}
             </div>
           </div>
@@ -320,10 +359,12 @@ export default function PPS() {
                 id="f_issueDate"
                 className={`fi ${errors.issueDate ? 'is-error' : ''}`}
                 type="date"
-                max={new Date().toISOString().split('T')[0]}
+                min={minIssueDate()}
+                max={toInputDate(new Date())}
                 value={form.issueDate}
                 onChange={e => setField('issueDate', e.target.value)}
               />
+              <p className="fhint">Must be within the last 3 months and not a future date</p>
               {errors.issueDate && <p className="ferr">⚠ {errors.issueDate}</p>}
             </div>
             <div className="fg">
@@ -343,18 +384,18 @@ export default function PPS() {
     }
 
     if (step === 'confirm') {
-      const acc = PPS_ACCOUNTS.find(a => a.value === form.accountNo);
       return (
         <>
           <div className="note warn">
             <span>⚠️</span>
             <span>Please review all details carefully. <b>Once submitted, changes cannot be made.</b></span>
           </div>
+          {apiError && <div className="note warn"><span>⚠️</span><span>{apiError}</span></div>}
           <div className="card">
             <div className="card-title"><span className="ic">✅</span>Review details</div>
             <p className="card-sub">Confirm these match the physical cheque before you proceed.</p>
             <div className="sum">
-              <div className="sumrow"><span className="k">Account</span><span className="v">{acc?.label}</span></div>
+              <div className="sumrow"><span className="k">Account</span><span className="v">{selectedAccount?.label}</span></div>
               <div className="sumrow"><span className="k">Cheque Number</span><span className="v mono">{form.chequeNo}</span></div>
               <div className="sumrow"><span className="k">Amount</span><span className="v">₹ {Number(form.chequeAmount).toLocaleString('en-IN')}</span></div>
               <div className="sumrow"><span className="k">Issue Date</span><span className="v">{new Date(form.issueDate).toLocaleDateString('en-IN')}</span></div>
@@ -368,7 +409,8 @@ export default function PPS() {
     if (step === 'otp') {
       return (
         <div className="card">
-          <OtpBoxes onComplete={() => setStep('success')} />
+          {apiError && <p className="ferr" style={{ marginBottom: 12 }}>⚠ {apiError}</p>}
+          <OtpBoxes onComplete={handleOtpComplete} disabled={loading} />
         </div>
       );
     }
@@ -414,7 +456,7 @@ export default function PPS() {
       return (
         <Actions>
           <button type="button" className="btn btn-secondary" onClick={() => setStep('form')}>← Edit</button>
-          <button type="button" className="btn btn-primary" disabled={loading} onClick={sendOtp}>
+          <button type="button" className="btn btn-primary" disabled={loading} onClick={sendOtpAndProceed}>
             {loading ? 'Sending OTP…' : 'Confirm & Get OTP →'}
           </button>
         </Actions>

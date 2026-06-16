@@ -1,19 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import OTPInput from '../../components/OTPInput';
 import Select from '../../components/Select';
 import { Actions } from '../../components/ServiceShell';
-import NomineeFields, { type NomineeFieldValues, type NomineeFieldErrors, validateNomineeFields } from '../../components/NomineeFields';
+import {
+  type NomineeFieldValues,
+  type NomineeFieldErrors,
+  validateNomineeFields,
+  calcAge,
+} from '../../components/NomineeFields';
 import { useFlow } from '../../context/FlowContext';
 import { useRedirectHome } from '../../hooks/useRedirectHome';
-import { SAVING_ACCOUNTS } from '../../types';
-import { getAccounts, type AccountOption } from '../../services/api';
+import { useAccounts } from '../../hooks/useAccounts';
+import { useInsurancePremium } from '../../hooks/useInsurancePremium';
+import type { PMSocialSubservice } from '../../types';
+import { doProcessPMJJBYSBY, sendOtp, validateOtp } from '../../services/api';
+import { PENSION_AMOUNT_OPTIONS } from '../../utils/pmPremium';
 
-type Scheme = 'PMJJBY' | 'PMSBY' | 'PMAPY';
 type NomineeSource = 'existing' | 'new';
-type Step = 'select' | 'form' | 'confirm' | 'otp' | 'success';
-const STEP_NUM: Record<Step, number> = { select: 1, form: 2, confirm: 3, otp: 4, success: 5 };
+type Step = 'form' | 'confirm' | 'otp' | 'success';
+const STEP_NUM: Record<Step, number> = { form: 1, confirm: 2, otp: 3, success: 4 };
 
-const SCHEME_INFO: Record<Scheme, { name: string; desc: string; premium: string; coverage: string; color: string }> = {
+const SCHEME_INFO: Record<PMSocialSubservice, { name: string; desc: string; premium: string; coverage: string; color: string }> = {
   PMJJBY: {
     name: 'Pradhan Mantri Jeevan Jyoti Bima Yojana',
     desc: 'Life insurance cover for death due to any cause',
@@ -38,6 +45,7 @@ const SCHEME_INFO: Record<Scheme, { name: string; desc: string; premium: string;
 };
 
 const INSTALLMENT_FREQ = ['Monthly', 'Quarterly', 'Half Yearly'];
+const LazyNomineeFields = lazy(() => import('../../components/NomineeFields'));
 
 const EMPTY_NOMINEE: NomineeFieldValues = {
   nomineeName: '', nomineeDob: '', relation: '',
@@ -45,70 +53,105 @@ const EMPTY_NOMINEE: NomineeFieldValues = {
 };
 
 export default function PMSocial() {
-  const { setCurrentStep } = useFlow();
-  const [scheme, setScheme] = useState<Scheme | null>(null);
-  const [step, setStep] = useState<Step>('select');
-  useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step]);
+  const { subservice, setCurrentStep, customer } = useFlow();
+  const [step, setStep] = useState<Step>('form');
   const [savingAccount, setSavingAccount] = useState('');
+  const [pensionAmount, setPensionAmount] = useState('');
   const [installmentFreq, setInstallmentFreq] = useState('');
   const [nomineeSource, setNomineeSource] = useState<NomineeSource | ''>('');
   const [nominee, setNominee] = useState<NomineeFieldValues>(EMPTY_NOMINEE);
   const [nomineeErrors, setNomineeErrors] = useState<NomineeFieldErrors>({});
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [refNo] = useState(() => 'PMS' + Date.now().toString().slice(-8));
+  const [apiError, setApiError] = useState('');
+  const [refNo, setRefNo] = useState('');
+
+  const insuranceScheme = subservice === 'PMJJBY' || subservice === 'PMSBY' ? subservice : null;
+  const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
+  const { premium: premiumDetails, loading: premiumLoading } = useInsurancePremium(insuranceScheme);
+
+  useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step, setCurrentStep]);
   useRedirectHome(step === 'success');
+
+  if (!subservice) return null;
+  const scheme = subservice;
 
   const setNomineeField = (k: keyof NomineeFieldValues, v: string) => {
     setNominee(n => ({ ...n, [k]: v }));
     setNomineeErrors(e => ({ ...e, [k]: '' }));
   };
 
-  const [accountNo, setAccountNo] = useState('');
-
   const validateForm = () => {
     const e: Record<string, string> = {};
     if (!savingAccount) e.savingAccount = 'Please select a savings account';
-    if (scheme === 'PMAPY' && !installmentFreq) e.installmentFreq = 'Please select installment frequency';
+    if (scheme === 'PMAPY') {
+      if (!pensionAmount) e.pensionAmount = 'Please select pension amount';
+      if (!installmentFreq) e.installmentFreq = 'Please select installment frequency';
+    }
     if (!nomineeSource) e.nomineeSource = 'Please select nominee option';
     setFormErrors(e);
     if (Object.keys(e).length > 0) return false;
 
     if (nomineeSource === 'new') {
-      const ne = validateNomineeFields(nominee);
+      const ne = validateNomineeFields(nominee, { requireGuardianDob: false });
       setNomineeErrors(ne);
       return Object.keys(ne).length === 0;
     }
     return true;
   };
 
-  //const acc = SAVING_ACCOUNTS.find(a => a.value === savingAccount);
+  const acc = accounts.find(a => a.value === savingAccount);
+  const nomineeIsMinor = nominee.nomineeDob ? (calcAge(nominee.nomineeDob) ?? 18) < 18 : false;
 
-  const [accounts, setAccounts] = useState<AccountOption[]>([]);
-  
-     useEffect(() => {
-        const loadAccounts = async () => {
-          try {
-            const data = await getAccounts();
-            console.log('Accounts:', data);
-            setAccounts(data);
-            console.log('Accounts state updated:', accounts);
-          } catch (error) {
-            console.error('Failed to load accounts:', error);
-          }
-        };
-    
-        loadAccounts();
-      }, []);
-    
-      const acc = accounts.find(a => a.value === accountNo);
-      const maskedAccounts = accounts.map(acc => ({
-        ...acc,
-        label:
-          acc.value.length > 4
-            ? '*'.repeat(acc.value.length - 4) + acc.value.slice(-4)
-            : acc.value,
-      }));
+  const sendOtpAndProceed = async () => {
+    if (scheme !== 'PMJJBY' && scheme !== 'PMSBY') {
+      setStep('otp');
+      return;
+    }
+    setLoading(true);
+    setApiError('');
+    try {
+      await sendOtp(customer.mobileNo, 'PMYSCHEMEOTP');
+      setStep('otp');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpComplete = async (otp: string) => {
+    setApiError('');
+    if (scheme === 'PMAPY') {
+      setRefNo('PMS' + Date.now().toString().slice(-8));
+      setStep('success');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await validateOtp(customer.mobileNo, otp, 'PMYSCHEMEOTP');
+      const result = await doProcessPMJJBYSBY({
+        customerId: customer.customerId,
+        debitAccountNumber: savingAccount,
+        insuranceCompany: scheme,
+        totalPremiumAmount: premiumDetails?.totalPremium ?? 0,
+        nomineeName: nomineeSource === 'new' ? nominee.nomineeName : '',
+        nomineeRelationCode: nomineeSource === 'new' ? nominee.relation : '',
+        nomineeDob: nomineeSource === 'new' ? nominee.nomineeDob : '',
+        guardianName: nomineeSource === 'new' && nomineeIsMinor ? nominee.guardianName : '',
+        guardianRelationCode: nomineeSource === 'new' && nomineeIsMinor ? nominee.guardianRelation : '',
+        nomineeIsMinor: nomineeSource === 'new' && nomineeIsMinor,
+      });
+      setRefNo(result.referenceNumber);
+      setStep('success');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Enrollment failed');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
 
   /* ── SUCCESS ── */
   if (step === 'success') return (
@@ -123,80 +166,51 @@ export default function PMSocial() {
             <div className="ref-label">Reference Number</div>
             <div className="ref-value">{refNo}</div>
           </div>
-          {scheme && (
-            <div className="info-box" style={{ textAlign: 'left', maxWidth: 400 }}>
-              <span className="info-icon">ℹ️</span>
-              <span>Coverage: {SCHEME_INFO[scheme].coverage} | Premium: {SCHEME_INFO[scheme].premium}</span>
-            </div>
-          )}
+          <div className="info-box" style={{ textAlign: 'left', maxWidth: 400 }}>
+            <span className="info-icon">ℹ️</span>
+            <span>Coverage: {SCHEME_INFO[scheme].coverage} | Premium: {SCHEME_INFO[scheme].premium}</span>
+          </div>
           <p className="redirect-hint">Redirecting to home…</p>
         </div>
       </div>
     </>
   );
 
-  /* ── SELECT SCHEME ── */
-  if (step === 'select') return (
-    <>      <div className="flow-content">
-        <div className="card">
-          <div className="card-title"><span className="card-icon">🏛️</span>PM Social Scheme</div>
-          <div className="info-box">
-            <span className="info-icon">ℹ️</span>
-            <span>Government social security schemes providing life, accident insurance and pension at very low premiums.</span>
-          </div>
-
-          {/* Select Scheme — Radio Button */}
-          <div className="form-group">
-            <label className="form-label">Select Scheme <span className="required">*</span></label>
-            <div className="radio-group">
-              {(['PMJJBY', 'PMSBY', 'PMAPY'] as Scheme[]).map(s => (
-                <label key={s} className={`radio-option ${scheme === s ? 'selected' : ''}`}>
-                  <input type="radio" name="scheme" checked={scheme === s} onChange={() => setScheme(s)} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className="radio-label">{s}</span>
-                      <span className={`scheme-badge scheme-${s}`}>{SCHEME_INFO[s].premium}</span>
-                    </div>
-                    <div className="radio-desc">{SCHEME_INFO[s].desc}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Scheme detail card */}
-        {scheme && (
-          <div className="card" style={{ borderColor: '#c5d6f5', background: '#f0f4fb' }}>
-            <div className="card-title" style={{ fontSize: 13 }}><span className="card-icon">📋</span>Scheme Details</div>
-            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', marginBottom: 10 }}>{SCHEME_INFO[scheme].name}</p>
-            <div className="summary-row"><span className="summary-key">Annual Premium</span><span className="summary-val">{SCHEME_INFO[scheme].premium}</span></div>
-            <div className="summary-row"><span className="summary-key">Coverage / Benefit</span><span className="summary-val">{SCHEME_INFO[scheme].coverage}</span></div>
-          </div>
-        )}
-      </div>
-      <Actions>
-        <button className="btn btn-primary" disabled={!scheme} onClick={() => setStep('form')}>
-          Continue →
-        </button>
-      </Actions>
-    </>
-  );
-
   /* ── ENROLLMENT DETAILS FORM ── */
   if (step === 'form') return (
     <>      <div className="flow-content">
+        <div className="card" style={{ borderColor: '#c5d6f5', background: '#f0f4fb' }}>
+          <div className="card-title" style={{ fontSize: 13 }}>
+            <span className="card-icon">📋</span>Scheme Details
+            <span className={`scheme-badge scheme-${scheme}`} style={{ marginLeft: 'auto' }}>{scheme}</span>
+          </div>
+          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', marginBottom: 10 }}>{SCHEME_INFO[scheme].name}</p>
+          <div className="summary-row"><span className="summary-key">Annual Premium</span><span className="summary-val">{SCHEME_INFO[scheme].premium}</span></div>
+          <div className="summary-row"><span className="summary-key">Coverage / Benefit</span><span className="summary-val">{SCHEME_INFO[scheme].coverage}</span></div>
+          {(scheme === 'PMJJBY' || scheme === 'PMSBY') && premiumLoading && (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>Loading premium details…</p>
+          )}
+          {premiumDetails && (
+            <>
+              <div className="divider" />
+              <div className="summary-row"><span className="summary-key">Total Premium Amount</span><span className="summary-val">₹{premiumDetails.totalPremium.toLocaleString('en-IN')}</span></div>
+              <div className="summary-row"><span className="summary-key">First Premium Amount (Pro Rata)</span><span className="summary-val">₹{premiumDetails.firstPremium.toLocaleString('en-IN')}</span></div>
+              <div className="summary-row"><span className="summary-key">Next Premium Debit Window</span><span className="summary-val">{premiumDetails.nextDebitWindow}</span></div>
+            </>
+          )}
+        </div>
+
         <div className="card">
           <div className="card-title">
             <span className="card-icon">✏️</span>Enrollment Details
-            {scheme && <span className={`scheme-badge scheme-${scheme}`} style={{ marginLeft: 'auto' }}>{scheme}</span>}
+            <span className={`scheme-badge scheme-${scheme}`} style={{ marginLeft: 'auto' }}>{scheme}</span>
           </div>
 
-          {/* Debit Account — Radio Button or Selection */}
           <div className="form-group">
             <label className="form-label">Debit Savings Account <span className="required">*</span></label>
             <div className="radio-group">
-              {maskedAccounts.map(a => (
+              {accountsLoading && <p className="form-hint">Loading accounts…</p>}
+              {accounts.map(a => (
                 <label key={a.value} className={`radio-option ${savingAccount === a.value ? 'selected' : ''}`}>
                   <input type="radio" name="account" checked={savingAccount === a.value}
                     onChange={() => { setSavingAccount(a.value); setFormErrors(e => ({ ...e, savingAccount: '' })); }} />
@@ -207,24 +221,35 @@ export default function PMSocial() {
             {formErrors.savingAccount && <p className="form-error">⚠ {formErrors.savingAccount}</p>}
           </div>
 
-          {/* PMAPY only — Installment Frequency — Drop Down */}
           {scheme === 'PMAPY' && (
-            <div className="form-group">
-              <label className="form-label">Installment Frequency <span className="required">*</span></label>
-              <Select
-                className={formErrors.installmentFreq ? 'is-error' : ''}
-                value={installmentFreq}
-                placeholder="Select frequency"
-                options={INSTALLMENT_FREQ.map(f => ({ value: f, label: f }))}
-                onChange={v => { setInstallmentFreq(v); setFormErrors(f => ({ ...f, installmentFreq: '' })); }}
-              />
-              {formErrors.installmentFreq && <p className="form-error">⚠ {formErrors.installmentFreq}</p>}
-            </div>
+            <>
+              <div className="form-group">
+                <label className="form-label">Pension Amount <span className="required">*</span></label>
+                <Select
+                  className={formErrors.pensionAmount ? 'is-error' : ''}
+                  value={pensionAmount}
+                  placeholder="Select pension amount"
+                  options={PENSION_AMOUNT_OPTIONS}
+                  onChange={v => { setPensionAmount(v); setFormErrors(f => ({ ...f, pensionAmount: '' })); }}
+                />
+                {formErrors.pensionAmount && <p className="form-error">⚠ {formErrors.pensionAmount}</p>}
+              </div>
+              <div className="form-group">
+                <label className="form-label">Installment Frequency <span className="required">*</span></label>
+                <Select
+                  className={formErrors.installmentFreq ? 'is-error' : ''}
+                  value={installmentFreq}
+                  placeholder="Select frequency"
+                  options={INSTALLMENT_FREQ.map(f => ({ value: f, label: f }))}
+                  onChange={v => { setInstallmentFreq(v); setFormErrors(f => ({ ...f, installmentFreq: '' })); }}
+                />
+                {formErrors.installmentFreq && <p className="form-error">⚠ {formErrors.installmentFreq}</p>}
+              </div>
+            </>
           )}
 
           <div className="divider" />
 
-          {/* Add Nominee — Drop Down (Debit Account Nominee / New Nominee) */}
           <div className="form-group">
             <label className="form-label">Add Nominee <span className="required">*</span></label>
             <Select
@@ -240,16 +265,17 @@ export default function PMSocial() {
             {formErrors.nomineeSource && <p className="form-error">⚠ {formErrors.nomineeSource}</p>}
           </div>
 
-          {/* New Nominee fields — shown only if "new" selected */}
           {nomineeSource === 'new' && (
             <>
               <div className="section-heading">New Nominee Details</div>
-              {/* Nominee Name — Input text */}
-              {/* Nominee DOB — Calendar selection */}
-              {/* Relationship — Drop down */}
-              {/* Nominee Minor — auto from DOB */}
-              {/* Guardian fields if minor */}
-              <NomineeFields values={nominee} errors={nomineeErrors} onChange={setNomineeField} />
+              <Suspense fallback={<p className="form-hint">Loading nominee form…</p>}>
+                <LazyNomineeFields
+                  values={nominee}
+                  errors={nomineeErrors}
+                  onChange={setNomineeField}
+                  showGuardianDob={false}
+                />
+              </Suspense>
             </>
           )}
 
@@ -262,12 +288,9 @@ export default function PMSocial() {
         </div>
       </div>
       <Actions>
-        <div className="btn-row">
-          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('select')}>← Back</button>
-          <button className="btn btn-primary" style={{ flex: 2 }} onClick={() => { if (validateForm()) setStep('confirm'); }}>
-            Review →
-          </button>
-        </div>
+        <button className="btn btn-primary" onClick={() => { if (validateForm()) setStep('confirm'); }}>
+          Review →
+        </button>
       </Actions>
     </>
   );
@@ -279,15 +302,26 @@ export default function PMSocial() {
           <span>⚠️</span>
           <span>Premium will be auto-debited annually from your savings account on enrollment date.</span>
         </div>
+        {apiError && <div className="alert alert-warning"><span>⚠️</span><span>{apiError}</span></div>}
         <div className="card">
           <div className="card-title">
             <span className="card-icon">✅</span>Review Enrollment
-            {scheme && <span className={`scheme-badge scheme-${scheme}`} style={{ marginLeft: 'auto' }}>{scheme}</span>}
+            <span className={`scheme-badge scheme-${scheme}`} style={{ marginLeft: 'auto' }}>{scheme}</span>
           </div>
-          <div className="summary-row"><span className="summary-key">Scheme</span><span className="summary-val">{scheme && SCHEME_INFO[scheme].name}</span></div>
+          <div className="summary-row"><span className="summary-key">Scheme</span><span className="summary-val">{SCHEME_INFO[scheme].name}</span></div>
           <div className="summary-row"><span className="summary-key">Savings Account</span><span className="summary-val">{acc?.label}</span></div>
-          <div className="summary-row"><span className="summary-key">Annual Premium</span><span className="summary-val">{scheme && SCHEME_INFO[scheme].premium}</span></div>
-          {scheme === 'PMAPY' && <div className="summary-row"><span className="summary-key">Installment Frequency</span><span className="summary-val">{installmentFreq}</span></div>}
+          <div className="summary-row"><span className="summary-key">Annual Premium</span><span className="summary-val">{SCHEME_INFO[scheme].premium}</span></div>
+          {premiumDetails && (
+            <>
+              <div className="summary-row"><span className="summary-key">Total Premium Amount</span><span className="summary-val">₹{premiumDetails.totalPremium.toLocaleString('en-IN')}</span></div>
+              <div className="summary-row"><span className="summary-key">First Premium Amount (Pro Rata)</span><span className="summary-val">₹{premiumDetails.firstPremium.toLocaleString('en-IN')}</span></div>
+              <div className="summary-row"><span className="summary-key">Next Premium Debit Window</span><span className="summary-val">{premiumDetails.nextDebitWindow}</span></div>
+            </>
+          )}
+          {scheme === 'PMAPY' && <>
+            <div className="summary-row"><span className="summary-key">Pension Amount</span><span className="summary-val">₹{Number(pensionAmount).toLocaleString('en-IN')} / month</span></div>
+            <div className="summary-row"><span className="summary-key">Installment Frequency</span><span className="summary-val">{installmentFreq}</span></div>
+          </>}
           <div className="divider" />
           <div className="summary-row"><span className="summary-key">Nominee Source</span><span className="summary-val">{nomineeSource === 'existing' ? 'Account Nominee' : 'New Nominee'}</span></div>
           {nomineeSource === 'new' && <>
@@ -301,7 +335,7 @@ export default function PMSocial() {
         <div className="btn-row">
           <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('form')}>← Edit</button>
           <button className="btn btn-primary" style={{ flex: 2 }} disabled={loading}
-            onClick={() => { setLoading(true); setTimeout(() => { setLoading(false); setStep('otp'); }, 900); }}>
+            onClick={() => { if (validateForm()) sendOtpAndProceed(); }}>
             {loading ? 'Sending OTP…' : 'Confirm & Get OTP →'}
           </button>
         </div>
@@ -314,11 +348,9 @@ export default function PMSocial() {
     <>      <div className="flow-content">
         <div className="card otp-screen">
           <div className="card-title" style={{ justifyContent: 'center' }}><span className="card-icon">📱</span>OTP Verification</div>
-          <p className="otp-subtitle">Enter the 4-digit OTP sent to your registered mobile number to complete enrollment</p>
-          <OTPInput onComplete={() => {
-            setLoading(true);
-            setTimeout(() => { setLoading(false); setStep('success'); }, 1100);
-          }} />
+          <p className="otp-subtitle">Enter the 6-digit OTP sent to your registered mobile number to complete enrollment</p>
+          {apiError && <p className="form-error">⚠ {apiError}</p>}
+          <OTPInput onComplete={handleOtpComplete} />
           {loading && <p style={{ marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>Verifying…</p>}
           <p className="resend-text">Didn't receive OTP? <span className="resend-link">Resend OTP</span></p>
         </div>
@@ -331,5 +363,3 @@ export default function PMSocial() {
 
   return null;
 }
-
-

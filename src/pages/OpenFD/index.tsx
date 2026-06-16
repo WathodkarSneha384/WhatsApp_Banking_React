@@ -5,8 +5,7 @@ import { Actions } from '../../components/ServiceShell';
 import NomineeFields, { type NomineeFieldValues, type NomineeFieldErrors, validateNomineeFields } from '../../components/NomineeFields';
 import { useFlow } from '../../context/FlowContext';
 import { useRedirectHome } from '../../hooks/useRedirectHome';
-import { SAVING_ACCOUNTS } from '../../types';
-import { getAccounts, type AccountOption } from '../../services/api';
+import { useAccounts } from '../../hooks/useAccounts';
 
 type NomineeSource = 'existing' | 'new';
 type Step = 'form' | 'confirm' | 'otp' | 'success';
@@ -35,7 +34,7 @@ const EMPTY_NOMINEE: NomineeFieldValues = {
 };
 
 export default function OpenFD() {
-  const { setCurrentStep } = useFlow();
+  const { setCurrentStep, customer } = useFlow();
   const [step, setStep] = useState<Step>('form');
   useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step]);
   const [form, setForm] = useState<FDForm>({
@@ -51,7 +50,7 @@ export default function OpenFD() {
   const [fdAccNo] = useState(() => 'FD' + Math.floor(Math.random() * 9000000 + 1000000));
   useRedirectHome(step === 'success');
 
-  const [accountNo, setAccountNo] = useState('');
+  const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
 
   const set = <K extends keyof FDForm>(k: K, v: string) => {
     setForm(f => {
@@ -91,33 +90,7 @@ export default function OpenFD() {
     return true;
   };
 
- // const acc = SAVING_ACCOUNTS.find(a => a.value === form.savingAccount);
-  const [accounts, setAccounts] = useState<AccountOption[]>([]);
-
-  useEffect(() => {
-    const loadAccounts = async () => {
-      try {
-        const data = await getAccounts();
-        console.log('Accounts:', data);
-        setAccounts(data);
-        console.log('Accounts state updated:', accounts);
-      } catch (error) {
-        console.error('Failed to load accounts:', error);
-      }
-    };
-
-    loadAccounts();
-  }, []);
-
-  const acc = accounts.find(a => a.value === accountNo);
-  const maskedAccounts = accounts.map(acc => ({
-    ...acc,
-    label:
-      acc.value.length > 4
-        ? '*'.repeat(acc.value.length - 4) + acc.value.slice(-4)
-        : acc.value,
-  }));
-
+  const acc = accounts.find(a => a.value === form.savingAccount);
   const interestModes = form.depositType === 'Compound' ? INTEREST_MODES_COMPOUND : INTEREST_MODES_SIMPLE;
 
   /* ── SUCCESS ── */
@@ -154,9 +127,10 @@ export default function OpenFD() {
             className={errors.savingAccount ? 'is-error' : ''}
             value={form.savingAccount}
             placeholder="Select savings account"
-            options={maskedAccounts}
+            options={accounts}
             onChange={v => set('savingAccount', v)}
           />
+          {accountsLoading && <p className="form-hint">Loading accounts…</p>}
           {errors.savingAccount && <p className="form-error">⚠ {errors.savingAccount}</p>}
         </div>
 
@@ -340,7 +314,7 @@ export default function OpenFD() {
     <>      <div className="flow-content">
       <div className="card otp-screen">
         <div className="card-title" style={{ justifyContent: 'center' }}><span className="card-icon">📱</span>OTP Verification</div>
-        <p className="otp-subtitle">Enter the 4-digit OTP sent to your registered mobile number to authorise the FD</p>
+        <p className="otp-subtitle">Enter the 6-digit OTP sent to your registered mobile number to authorise the FD</p>
         <OTPInput onComplete={() => {
           setLoading(true);
           setTimeout(() => { setLoading(false); setStep('success'); }, 1100);

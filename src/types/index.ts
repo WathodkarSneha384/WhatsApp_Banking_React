@@ -1,5 +1,7 @@
 export type ServiceType = 'pps' | 'nominee' | 'pmsocial' | 'openfd';
 
+export type PMSocialSubservice = 'PMJJBY' | 'PMSBY' | 'PMAPY';
+
 export interface ServiceConfig {
   label: string;
   component: React.ComponentType;

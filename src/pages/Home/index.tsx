@@ -1,8 +1,9 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import ServiceShell from '../../components/ServiceShell';
 import type { ServiceType } from '../../types';
+import { clearSessionTimer } from '../../hooks/useSessionTimeout';
 
-const SERVICES: { id: ServiceType; icon: string; title: string; desc: string }[] = [
+const SERVICES: { id: ServiceType; icon: string; title: string; desc: string; subservice?: string }[] = [
   {
     id: 'pps',
     icon: '📋',
@@ -18,8 +19,23 @@ const SERVICES: { id: ServiceType; icon: string; title: string; desc: string }[]
   {
     id: 'pmsocial',
     icon: '🏛️',
-    title: 'PM Social Schemes',
-    desc: 'Enroll in government insurance and pension schemes.',
+    title: 'PMJJBY',
+    desc: 'Life insurance cover — ₹436 / year.',
+    subservice: 'PMJJBY',
+  },
+  {
+    id: 'pmsocial',
+    icon: '🏛️',
+    title: 'PMSBY',
+    desc: 'Accident insurance cover — ₹20 / year.',
+    subservice: 'PMSBY',
+  },
+  {
+    id: 'pmsocial',
+    icon: '🏛️',
+    title: 'PMAPY',
+    desc: 'Guaranteed pension for unorganised sector workers.',
+    subservice: 'PMAPY',
   },
   {
     id: 'openfd',
@@ -31,6 +47,13 @@ const SERVICES: { id: ServiceType; icon: string; title: string; desc: string }[]
 
 export default function Home() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sessionExpired = searchParams.get('session') === 'expired';
+
+  const openService = (path: string) => {
+    clearSessionTimer();
+    navigate(path);
+  };
 
   return (
     <ServiceShell
@@ -38,13 +61,23 @@ export default function Home() {
       description="Select a service below to continue securely."
       breadcrumb="Home"
     >
+      {sessionExpired && (
+        <div className="alert alert-warning" style={{ marginBottom: 16 }}>
+          <span>⏱️</span>
+          <span>Your session has expired after 30 minutes. Please select a service again to continue.</span>
+        </div>
+      )}
       <div className="home-grid">
         {SERVICES.map(s => (
           <button
-            key={s.id}
+            key={`${s.id}-${s.subservice ?? 'main'}`}
             type="button"
             className="home-card"
-            onClick={() => navigate(`/?service=${s.id}`)}
+            onClick={() => openService(
+              s.subservice
+                ? `/?service=${s.id}&subservice=${s.subservice}`
+                : `/?service=${s.id}`,
+            )}
           >
             <span className="home-card-icon">{s.icon}</span>
             <span className="home-card-body">
