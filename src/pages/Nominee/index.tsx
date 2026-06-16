@@ -7,7 +7,7 @@ import { formatDDMMYYYY } from '../../utils/date';
 import { useFlow } from '../../context/FlowContext';
 import { useRedirectHome } from '../../hooks/useRedirectHome';
 import { useAccounts } from '../../hooks/useAccounts';
-import { nomineeRegistration, verifyExistingNominees } from '../../services/bankingApi';
+import { nomineeRegistration, sendOtp, validateOtp, verifyExistingNominees } from '../../services/bankingApi';
 
 type NomineeType = 'new' | 'update';
 type Step = 'select' | 'otp' | 'form' | 'confirm' | 'success';
@@ -34,6 +34,8 @@ export default function Nominee() {
   const [nomineeExists, setNomineeExists] = useState<boolean | null>(null);
   const [nomineeData, setNomineeData] = useState<any[]>([]);
   const [checkingNominee, setCheckingNominee] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [apiError, setApiError] = useState('');
 
   useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step, setCurrentStep]);
 
@@ -87,37 +89,62 @@ export default function Nominee() {
 
 
   const handleSubmit = async () => {
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const isMinorNominee =
-      nominee.nomineeDob
-        ? (new Date().getFullYear() - new Date(nominee.nomineeDob).getFullYear()) < 18
-        : false;
+      const isMinorNominee =
+        nominee.nomineeDob
+          ? (new Date().getFullYear() - new Date(nominee.nomineeDob).getFullYear()) < 18
+          : false;
 
-    const response = await nomineeRegistration({
-      accountNumber: accountNo,
-      nomineeName: nominee.nomineeName,
-      nomineeDateOfBirth: nominee.nomineeDob,
-      nomineeRelation: nominee.relation,
-      nomineeisMinor: isMinorNominee ? 'Y' : 'N',
-      guardianName: isMinorNominee ? nominee.guardianName : '',
-      guardianDateOfBirth: isMinorNominee ? nominee.guardianDob : '',
-      relationWithMinor: isMinorNominee ? nominee.guardianRelation : '',
-    });
+      const response = await nomineeRegistration({
+        accountNumber: accountNo,
+        nomineeName: nominee.nomineeName,
+        nomineeDateOfBirth: nominee.nomineeDob,
+        nomineeRelation: nominee.relation,
+        nomineeisMinor: isMinorNominee ? 'Y' : 'N',
+        guardianName: isMinorNominee ? nominee.guardianName : '',
+        guardianDateOfBirth: isMinorNominee ? nominee.guardianDob : '',
+        relationWithMinor: isMinorNominee ? nominee.guardianRelation : '',
+      });
 
-    if (response?.status === '00' || response?.errorCode === '00') {
-      setStep('success');
-    } else {
-      alert(response?.errorMsg || 'Nominee registration failed');
+      if (response?.status === '00' || response?.errorCode === '00') {
+        setStep('success');
+      } else {
+        alert(response?.errorMsg || 'Nominee registration failed');
+      }
+    } catch (error) {
+      console.error('Nominee registration failed:', error);
+      alert('Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Nominee registration failed:', error);
-    alert('Something went wrong. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
+  const sendOtpAndProceed = async () => {
+    setLoading(true);
+    setApiError('');
+    setOtpVerified(false);
+    try {
+      await sendOtp(customer.mobileNo, 'TDACCOUNTOPEN');
+      setStep('otp');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+  const handleOtpComplete = async (otp: string) => {
+    setApiError('');
+    try {
+      await validateOtp(customer.mobileNo, otp, 'TDACCOUNTOPEN');
+      setOtpVerified(true);
+      //setStep('submit');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'OTP verification failed');
+      throw err;
+    }
+  };
 
   /* ── SUCCESS ── */
   if (step === 'success') return (
@@ -189,7 +216,7 @@ export default function Nominee() {
             </label> */}
           </div>
           {selectErrors.type && <p className="form-error">⚠ {selectErrors.type}</p>}
-        </div>  )}
+        </div>)}
         {checkingNominee && (
           <p className="form-hint">Checking nominee details...</p>
         )}
@@ -216,14 +243,14 @@ export default function Nominee() {
       <Actions>
         <button
           className="btn btn-primary"
-          disabled={nomineeExists === true}
-          onClick={() => {
+          disabled={loading || nomineeExists === true}
+          onClick={async () => {
             if (validateSelect() && nomineeExists !== true) {
-              setStep('otp');
+              await sendOtpAndProceed();
             }
           }}
         >
-          Continue →
+          {loading ? 'Sending OTP...' : 'Continue →'}
         </button>
       </Actions>
     </>
@@ -235,10 +262,18 @@ export default function Nominee() {
       <div className="card otp-screen">
         <div className="card-title" style={{ justifyContent: 'center' }}><span className="card-icon">📱</span>OTP Verification</div>
         <p className="otp-subtitle">Enter the 5-digit OTP sent to your registered mobile number to proceed with nominee {type === 'new' ? 'registration' : 'update'}</p>
-        <OTPInput onComplete={() => {
-          setLoading(true);
-          setTimeout(() => { setLoading(false); setStep('form'); }, 1000);
-        }} />
+        <OTPInput
+          onComplete={async (otp) => {
+            setLoading(true);
+
+            try {
+              await handleOtpComplete(otp);
+              setStep('form');
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
         {loading && <p style={{ marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>Verifying…</p>}
         <p className="resend-text">Didn't receive OTP? <span className="resend-link">Resend OTP</span></p>
       </div>
@@ -305,7 +340,7 @@ export default function Nominee() {
           <div className="btn-row">
             <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('form')}>← Edit</button>
             <button className="btn btn-primary" style={{ flex: 2 }} disabled={loading}
-             onClick={handleSubmit}>
+              onClick={handleSubmit}>
               {loading ? 'Submitting…' : 'Submit →'}
             </button>
           </div>

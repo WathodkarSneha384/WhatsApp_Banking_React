@@ -163,7 +163,7 @@ export default function NomineeFields({
               className={errors.guardianRelation ? 'is-error' : ''}
               value={values.guardianRelation}
               placeholder="Select relation"
-              options={RELATION_OPTIONS}
+              options={relationOptions}
               onChange={v => onChange('guardianRelation', v)}
             />
             {errors.guardianRelation && <p className="form-error">⚠ {errors.guardianRelation}</p>}

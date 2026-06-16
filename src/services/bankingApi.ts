@@ -267,7 +267,7 @@ export async function fetchInsurancePremium(
   try {
     const timeStamp = generateTimestamp();
     const checkSum = generateChecksum(
-      SECRET_KEY, VENDOR, 'getpreinsamount', USERNAME, PASSWORD, BANK, scheme, scheme,
+      SECRET_KEY, VENDOR, 'getpreinsamount', USERNAME, PASSWORD,scheme
     );
 
     const data = await postEndpoint<BankApiResponse & { insurancePremiumAmount?: string }>(
