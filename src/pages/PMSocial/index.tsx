@@ -111,7 +111,7 @@ export default function PMSocial() {
     setLoading(true);
     setApiError('');
     try {
-      await sendOtp(customer.mobileNo, 'PMYSCHEMEOTP');
+      await sendOtp(customer.mobileNo, 'TDACCOUNTOPEN');
       setStep('otp');
     } catch (err) {
       setApiError(err instanceof Error ? err.message : 'Failed to send OTP');
@@ -130,7 +130,7 @@ export default function PMSocial() {
 
     setLoading(true);
     try {
-      await validateOtp(customer.mobileNo, otp, 'PMYSCHEMEOTP');
+      await validateOtp(customer.mobileNo, otp, 'TDACCOUNTOPEN');
       const result = await doProcessPMJJBYSBY({
         customerId: customer.customerId,
         debitAccountNumber: savingAccount,
@@ -257,7 +257,7 @@ export default function PMSocial() {
               value={nomineeSource}
               placeholder="Select nominee option"
               options={[
-                { value: 'existing', label: 'Use Debit Account Nominee' },
+               
                 { value: 'new', label: 'Add New Nominee' },
               ]}
               onChange={v => { setNomineeSource(v as NomineeSource); setFormErrors(f => ({ ...f, nomineeSource: '' })); }}

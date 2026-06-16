@@ -8,10 +8,10 @@ const API_BASE = '/dmCmsService/rest/endpoints';
 const SECRET_KEY = '35fc015d9308f316bd524c824cce9cd56ea7e455c6fe5b37bf';
 const VENDOR = 'MOBILE';
 const USERNAME = 'MOBILE';
-const PASSWORD = '95700e3a92830ae20ce0bddb23a2c1178f96017d70362572be90e293598c6126';
+const PASSWORD = "95700e3a92830ae20ce0bddb23a2c1178f96017d70362572be90e293598c6126";
 const CHANNEL = 'WB';
 
-export const DEV_CUSTOMER_ID = 'R00047';
+export const DEV_CUSTOMER_ID = '0000992099005742';
 export const DEV_MOBILE_NO = '9908360790';
 
 export interface TokenValidationResponse {
@@ -87,10 +87,17 @@ export const generateTimestamp = () => {
   );
 };
 
-function maskAccount(accountNo: string): string {
-  return accountNo.length > 4
-    ? '*'.repeat(accountNo.length - 4) + accountNo.slice(-4)
-    : accountNo;
+function maskAccount(accountNo: string, branchName: string): string {
+  if (!accountNo) {
+    return branchName || '';
+  }
+
+  const maskedAccount =
+    accountNo.length > 4
+      ? 'X'.repeat(accountNo.length - 4) + accountNo.slice(-4)
+      : accountNo;
+
+  return `${branchName} - ${maskedAccount}`;
 }
 
 function assertSuccess(data: BankApiResponse, fallback = 'Request failed'): void {
@@ -168,8 +175,9 @@ export async function fetchAccounts(customerId: string): Promise<AccountOption[]
   return data.accountWiseBalances.map((item) => {
     const accountno = String(item.accountno ?? '');
     const fullAccountNumber = String(item.fullAccountNumber ?? accountno);
+    const branchName = String(item.branchName ?? '');
     return {
-      label: maskAccount(accountno),
+      label: maskAccount(accountno,branchName),
       value: fullAccountNumber,
       fullAccountNumber,
       balance: Number(item.accountBal ?? 0),
@@ -295,10 +303,11 @@ export function prefetchInsurancePremium(scheme: Extract<PMSocialSubservice, 'PM
   return getInsurancePremium(scheme);
 }
 
-export async function sendOtp(mobileNo: string, otpRequiredFor: 'PPSCREATE' | 'PMYSCHEMEOTP'): Promise<void> {
+export async function sendOtp(mobileNo: string, otpRequiredFor: 'TDACCOUNTOPEN'): Promise<void> {
   const timeStamp = generateTimestamp();
   const checkSum = generateChecksum(
-    SECRET_KEY, VENDOR, 'sendotp', USERNAME, PASSWORD, BANK, mobileNo, otpRequiredFor,
+    SECRET_KEY, VENDOR, 'sendotp', USERNAME, PASSWORD, '9908360790', BANK
+
   );
 
   await postEndpoint(
@@ -316,11 +325,11 @@ export async function sendOtp(mobileNo: string, otpRequiredFor: 'PPSCREATE' | 'P
 export async function validateOtp(
   mobileNo: string,
   otp: string,
-  otpValidateFor: 'PPSCREATE' | 'PMYSCHEMEOTP',
+  otpValidateFor: 'TDACCOUNTOPEN',
 ): Promise<void> {
   const timeStamp = generateTimestamp();
   const checkSum = generateChecksum(
-    SECRET_KEY, VENDOR, 'validateotp', USERNAME, PASSWORD, BANK, mobileNo, otp, otpValidateFor,
+    SECRET_KEY, VENDOR, 'validateotp', USERNAME, PASSWORD, mobileNo, BANK,
   );
 
   await postEndpoint(
@@ -346,6 +355,11 @@ export async function createPPSChequeEntry(input: {
 }): Promise<{ success: boolean }> {
   const { accountNo, chequeNo, chequeAmount, payeeName, issueDate, mobileNo } = input;
   const timeStamp = generateTimestamp();
+  console.log('Creating PPS Cheque Entry with:', {
+    accountNo,
+    chequeNo,
+
+  });
   const checkSum = generateChecksum(
     SECRET_KEY,
     VENDOR,
@@ -354,12 +368,8 @@ export async function createPPSChequeEntry(input: {
     PASSWORD,
     accountNo,
     String(chequeNo),
-    String(chequeAmount),
-    CHANNEL,
-    payeeName,
-    issueDate,
-    '0',
-    mobileNo,
+
+
   );
 
   await postEndpoint(
@@ -379,6 +389,40 @@ export async function createPPSChequeEntry(input: {
   );
 
   return { success: true };
+}
+
+
+
+export async function verifyExistingNominees(input: {
+  accountNumber: string;
+}): Promise<any> {
+  const { accountNumber } = input;
+
+  const timeStamp = generateTimestamp();
+
+  console.log('Verifying Existing Nominees for:', {
+    accountNumber,
+  });
+
+  const checkSum = generateChecksum(
+    SECRET_KEY,
+    VENDOR,
+    'verifyexistingnominees',
+    USERNAME,
+    PASSWORD,
+    accountNumber
+  );
+
+  const response = await postEndpoint(
+    'verifyexistingnominees',
+    {
+      ...basePayload('verifyexistingnominees', checkSum),
+      timeStamp,
+      accountNumber,
+    },
+  );
+
+  return response;
 }
 
 export async function doProcessPMJJBYSBY(input: {
@@ -445,4 +489,58 @@ export async function validateToken(token: string): Promise<TokenValidationRespo
   const response = await fetch(`/api/validate-token?token=${encodeURIComponent(token)}`);
   if (!response.ok) throw new Error('Invalid or expired token');
   return response.json();
+}
+
+
+
+export async function nomineeRegistration(input: {
+  accountNumber: string;
+  nomineeName: string;
+  nomineeDateOfBirth: string;
+  nomineeRelation: string;
+  nomineeisMinor: 'Y' | 'N';
+  guardianName?: string;
+  guardianDateOfBirth?: string;
+  relationWithMinor?: string;
+}): Promise<any> {
+  const {
+    accountNumber,
+    nomineeName,
+    nomineeDateOfBirth,
+    nomineeRelation,
+    nomineeisMinor,
+    guardianName = '',
+    guardianDateOfBirth = '',
+    relationWithMinor = '',
+  } = input;
+
+  const timeStamp = generateTimestamp();
+
+  const checkSum = generateChecksum(
+    SECRET_KEY,
+    VENDOR,
+    'nomineeregistration',
+    USERNAME,
+    PASSWORD,
+    accountNumber,
+    nomineeName,
+  );
+
+  const response = await postEndpoint(
+    'nomineeregistration',
+    {
+      ...basePayload('nomineeregistration', checkSum),
+      timeStamp,
+      accountNumber,
+      nomineeName,
+      nomineeDateOfBirth,
+      nomineeRelation,
+      nomineeisMinor,
+      guardianName,
+      guardianDateOfBirth,
+      relationWithMinor,
+    }
+  );
+
+  return response;
 }

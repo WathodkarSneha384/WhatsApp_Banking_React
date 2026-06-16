@@ -7,6 +7,7 @@ import { formatDDMMYYYY } from '../../utils/date';
 import { useFlow } from '../../context/FlowContext';
 import { useRedirectHome } from '../../hooks/useRedirectHome';
 import { useAccounts } from '../../hooks/useAccounts';
+import { nomineeRegistration, verifyExistingNominees } from '../../services/bankingApi';
 
 type NomineeType = 'new' | 'update';
 type Step = 'select' | 'otp' | 'form' | 'confirm' | 'success';
@@ -30,12 +31,42 @@ export default function Nominee() {
   useRedirectHome(step === 'success');
 
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
+  const [nomineeExists, setNomineeExists] = useState<boolean | null>(null);
+  const [nomineeData, setNomineeData] = useState<any[]>([]);
+  const [checkingNominee, setCheckingNominee] = useState(false);
 
   useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step, setCurrentStep]);
 
   const setNomineeField = (k: keyof NomineeFieldValues, v: string) => {
     setNominee(n => ({ ...n, [k]: v }));
     setNomineeErrors(e => ({ ...e, [k]: '' }));
+  };
+
+  const checkNominee = async (accountNumber: string) => {
+    try {
+      setCheckingNominee(true);
+
+      const response = await verifyExistingNominees({
+        accountNumber,
+      });
+
+      if (
+        response?.status === '00' &&
+        response?.nomineeList?.length > 0
+      ) {
+        setNomineeExists(true);
+        setNomineeData(response.nomineeList);
+      } else {
+        setNomineeExists(false);
+        setNomineeData([]);
+      }
+    } catch (error) {
+      console.error('Error checking nominee:', error);
+      setNomineeExists(false);
+      setNomineeData([]);
+    } finally {
+      setCheckingNominee(false);
+    }
   };
 
   const validateSelect = () => {
@@ -53,6 +84,40 @@ export default function Nominee() {
   };
 
   const acc = accounts.find(a => a.value === accountNo);
+
+
+  const handleSubmit = async () => {
+  try {
+    setLoading(true);
+
+    const isMinorNominee =
+      nominee.nomineeDob
+        ? (new Date().getFullYear() - new Date(nominee.nomineeDob).getFullYear()) < 18
+        : false;
+
+    const response = await nomineeRegistration({
+      accountNumber: accountNo,
+      nomineeName: nominee.nomineeName,
+      nomineeDateOfBirth: nominee.nomineeDob,
+      nomineeRelation: nominee.relation,
+      nomineeisMinor: isMinorNominee ? 'Y' : 'N',
+      guardianName: isMinorNominee ? nominee.guardianName : '',
+      guardianDateOfBirth: isMinorNominee ? nominee.guardianDob : '',
+      relationWithMinor: isMinorNominee ? nominee.guardianRelation : '',
+    });
+
+    if (response?.status === '00' || response?.errorCode === '00') {
+      setStep('success');
+    } else {
+      alert(response?.errorMsg || 'Nominee registration failed');
+    }
+  } catch (error) {
+    console.error('Nominee registration failed:', error);
+    alert('Something went wrong. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   /* ── SUCCESS ── */
   if (step === 'success') return (
@@ -84,14 +149,20 @@ export default function Nominee() {
         {/* Account No — Selection Drop Down */}
         <div className="form-group">
           <label className="form-label">Account Number <span className="required">*</span></label>
+          {/* className={selectErrors.accountNo ? 'is-error' : ''}
+          value={accountNo} */}
           <Select
             className={selectErrors.accountNo ? 'is-error' : ''}
             value={accountNo}
             placeholder="Select account"
             options={accounts}
-            onChange={v => {
+            onChange={async v => {
               setAccountNo(v);
               setSelectErrors(s => ({ ...s, accountNo: '' }));
+
+              if (v) {
+                await checkNominee(v);
+              }
             }}
           />
           {accountsLoading && <p className="form-hint">Loading accounts…</p>}
@@ -99,7 +170,7 @@ export default function Nominee() {
         </div>
 
         {/* Nominee Action — Radio Button */}
-        <div className="form-group">
+        {!nomineeExists && (<div className="form-group">
           <label className="form-label">Nominee Action <span className="required">*</span></label>
           <div className="radio-group">
             <label className={`radio-option ${type === 'new' ? 'selected' : ''}`}>
@@ -118,11 +189,40 @@ export default function Nominee() {
             </label> */}
           </div>
           {selectErrors.type && <p className="form-error">⚠ {selectErrors.type}</p>}
-        </div>
+        </div>  )}
+        {checkingNominee && (
+          <p className="form-hint">Checking nominee details...</p>
+        )}
+
+        {nomineeExists === true && (
+          <div className="info-box warning">
+            <span>⚠️ Nominee already registered for this account.</span>
+
+            {nomineeData.map((nominee, index) => (
+              <div key={index}>
+                <strong>{nominee.nomineeName}</strong>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {nomineeExists === false && (
+          <div className="info-box success">
+            <span>✅ No nominee found. You can proceed with registration.</span>
+          </div>
+        )}
       </div>
     </div>
       <Actions>
-        <button className="btn btn-primary" onClick={() => { if (validateSelect()) setStep('otp'); }}>
+        <button
+          className="btn btn-primary"
+          disabled={nomineeExists === true}
+          onClick={() => {
+            if (validateSelect() && nomineeExists !== true) {
+              setStep('otp');
+            }
+          }}
+        >
           Continue →
         </button>
       </Actions>
@@ -205,7 +305,7 @@ export default function Nominee() {
           <div className="btn-row">
             <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('form')}>← Edit</button>
             <button className="btn btn-primary" style={{ flex: 2 }} disabled={loading}
-              onClick={() => { setLoading(true); setTimeout(() => { setLoading(false); setStep('success'); }, 1200); }}>
+             onClick={handleSubmit}>
               {loading ? 'Submitting…' : 'Submit →'}
             </button>
           </div>
