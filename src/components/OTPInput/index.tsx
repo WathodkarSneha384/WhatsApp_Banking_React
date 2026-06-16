@@ -5,7 +5,7 @@ interface OTPInputProps {
   length?: number;
 }
 
-export default function OTPInput({ onComplete, length = 6 }: OTPInputProps) {
+export default function OTPInput({ onComplete, length = 5 }: OTPInputProps) {
   const [digits, setDigits] = useState<string[]>(Array(length).fill(''));
   const refs = Array.from({ length }, () => useRef<HTMLInputElement>(null));
 

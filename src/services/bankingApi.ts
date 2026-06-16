@@ -345,14 +345,21 @@ export async function validateOtp(
   );
 }
 
+export interface PPSCreateResponse {
+  success: boolean;
+  resStatus: string;
+  errorCode: string;
+  errorMsg: string;
+}
+
 export async function createPPSChequeEntry(input: {
   accountNo: string;
-  chequeNo: number;
-  chequeAmount: number;
+  chequeNo: string;
+  chequeAmount: string;
   payeeName: string;
   issueDate: string;
   mobileNo: string;
-}): Promise<{ success: boolean }> {
+}): Promise<PPSCreateResponse> {
   const { accountNo, chequeNo, chequeAmount, payeeName, issueDate, mobileNo } = input;
   const timeStamp = generateTimestamp();
   console.log('Creating PPS Cheque Entry with:', {
@@ -367,28 +374,44 @@ export async function createPPSChequeEntry(input: {
     USERNAME,
     PASSWORD,
     accountNo,
-    String(chequeNo),
-
-
+    chequeNo,
+    chequeAmount,
+    issueDate,
+    CHANNEL,
+    payeeName,
+    mobileNo,
   );
 
-  await postEndpoint(
+  const data = await postEndpoint<BankApiResponse & { resStatus?: string }>(
     'createPPSChequeEntry',
     {
-      ...basePayload('createPPSChequeEntry', checkSum),
+      action: 'createPPSChequeEntry',
+      checkSum,
+      passwd: PASSWORD,
       timeStamp,
+      uname: USERNAME,
+      vendor: VENDOR,
       accountNo,
       chequeNo,
       chequeAmount,
+      issueDate,
       channel: CHANNEL,
       payeeName,
-      issueDate,
-      chequeSeries: '0',
       mobileNo,
     },
   );
 
-  return { success: true };
+  const resStatus = String(data.resStatus ?? '');
+  if (resStatus && resStatus !== 'SUCCESS') {
+    throw new Error(data.errorMsg || 'PPS entry failed');
+  }
+
+  return {
+    success: true,
+    resStatus: resStatus || 'SUCCESS',
+    errorCode: String(data.errorCode ?? '00'),
+    errorMsg: String(data.errorMsg ?? '00'),
+  };
 }
 
 

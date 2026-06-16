@@ -314,7 +314,7 @@ export default function OpenFD() {
     <>      <div className="flow-content">
       <div className="card otp-screen">
         <div className="card-title" style={{ justifyContent: 'center' }}><span className="card-icon">📱</span>OTP Verification</div>
-        <p className="otp-subtitle">Enter the 6-digit OTP sent to your registered mobile number to authorise the FD</p>
+        <p className="otp-subtitle">Enter the 5-digit OTP sent to your registered mobile number to authorise the FD</p>
         <OTPInput onComplete={() => {
           setLoading(true);
           setTimeout(() => { setLoading(false); setStep('success'); }, 1100);

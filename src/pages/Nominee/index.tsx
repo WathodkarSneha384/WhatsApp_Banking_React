@@ -234,7 +234,7 @@ export default function Nominee() {
     <>      <div className="flow-content">
       <div className="card otp-screen">
         <div className="card-title" style={{ justifyContent: 'center' }}><span className="card-icon">📱</span>OTP Verification</div>
-        <p className="otp-subtitle">Enter the 6-digit OTP sent to your registered mobile number to proceed with nominee {type === 'new' ? 'registration' : 'update'}</p>
+        <p className="otp-subtitle">Enter the 5-digit OTP sent to your registered mobile number to proceed with nominee {type === 'new' ? 'registration' : 'update'}</p>
         <OTPInput onComplete={() => {
           setLoading(true);
           setTimeout(() => { setLoading(false); setStep('form'); }, 1000);

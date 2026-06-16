@@ -348,7 +348,7 @@ export default function PMSocial() {
     <>      <div className="flow-content">
         <div className="card otp-screen">
           <div className="card-title" style={{ justifyContent: 'center' }}><span className="card-icon">📱</span>OTP Verification</div>
-          <p className="otp-subtitle">Enter the 6-digit OTP sent to your registered mobile number to complete enrollment</p>
+          <p className="otp-subtitle">Enter the 5-digit OTP sent to your registered mobile number to complete enrollment</p>
           {apiError && <p className="form-error">⚠ {apiError}</p>}
           <OTPInput onComplete={handleOtpComplete} />
           {loading && <p style={{ marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>Verifying…</p>}

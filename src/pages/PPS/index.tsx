@@ -9,7 +9,7 @@ import { createPPSChequeEntry, sendOtp, validateOtp } from '../../services/api';
 import { minIssueDate, toInputDate } from '../../utils/date';
 
 type Mode = 'entry' | 'view';
-type Step = 'select' | 'form' | 'confirm' | 'otp' | 'success';
+type Step = 'select' | 'form' | 'confirm' | 'otp' | 'submit' | 'success';
 
 interface EntryForm {
   accountNo: string;
@@ -19,10 +19,10 @@ interface EntryForm {
   payeeName: string;
 }
 
-const ENTRY_STEPS = ['Select Service', 'Enter Details', 'Review', 'Verify OTP', 'Done'];
+const ENTRY_STEPS = ['Select Service', 'Enter Details', 'Review', 'Verify OTP', 'Submit', 'Done'];
 const VIEW_STEPS = ['Select Service', 'Search', 'Result'];
 
-const STEP_NUM: Record<Step, number> = { select: 1, form: 2, confirm: 3, otp: 4, success: 5 };
+const STEP_NUM: Record<Step, number> = { select: 1, form: 2, confirm: 3, otp: 4, submit: 5, success: 6 };
 
 type FormErrors = Partial<Record<keyof EntryForm, string>>;
 
@@ -33,7 +33,7 @@ function OtpBoxes({
   onComplete: (otp: string) => void | Promise<void>;
   disabled?: boolean;
 }) {
-  const OTP_LENGTH = 6;
+  const OTP_LENGTH = 5;
   const [digits, setDigits] = useState(Array(OTP_LENGTH).fill(''));
   const [verifying, setVerifying] = useState(false);
   const [resendMsg, setResendMsg] = useState('');
@@ -74,7 +74,7 @@ function OtpBoxes({
         <span className="ic">📱</span>OTP Verification
       </div>
       <p className="card-sub" style={{ marginBottom: 0 }}>
-        Enter the 6-digit OTP sent to your registered mobile number ••210
+        Enter the 5-digit OTP sent to your registered mobile number ••210
       </p>
       <div className="otp-boxes">
         {digits.map((d, i) => (
@@ -111,6 +111,8 @@ export default function PPS() {
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const [refNo, setRefNo] = useState('');
+  const [ppsStatus, setPpsStatus] = useState('');
+  const [otpVerified, setOtpVerified] = useState(false);
   const goHome = useGoHome();
   useRedirectHome(step === 'success');
 
@@ -172,11 +174,24 @@ export default function PPS() {
     setViewChequeNo('');
     setErrors({});
     setLoading(false);
+    setApiError('');
+    setOtpVerified(false);
   };
+
+  const reviewSummary = (
+    <div className="sum">
+      <div className="sumrow"><span className="k">Account</span><span className="v">{selectedAccount?.label}</span></div>
+      <div className="sumrow"><span className="k">Cheque Number</span><span className="v mono">{form.chequeNo}</span></div>
+      <div className="sumrow"><span className="k">Amount</span><span className="v">₹ {Number(form.chequeAmount).toLocaleString('en-IN')}</span></div>
+      <div className="sumrow"><span className="k">Issue Date</span><span className="v">{new Date(form.issueDate).toLocaleDateString('en-IN')}</span></div>
+      <div className="sumrow"><span className="k">Payee Name</span><span className="v">{form.payeeName}</span></div>
+    </div>
+  );
 
   const sendOtpAndProceed = async () => {
     setLoading(true);
     setApiError('');
+    setOtpVerified(false);
     try {
       await sendOtp(customer.mobileNo, 'TDACCOUNTOPEN');
       setStep('otp');
@@ -191,19 +206,33 @@ export default function PPS() {
     setApiError('');
     try {
       await validateOtp(customer.mobileNo, otp, 'TDACCOUNTOPEN');
-      await createPPSChequeEntry({
+      setOtpVerified(true);
+      setStep('submit');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'OTP verification failed');
+      throw err;
+    }
+  };
+
+  const submitPpsEntry = async () => {
+    setLoading(true);
+    setApiError('');
+    try {
+      const result = await createPPSChequeEntry({
         accountNo: form.accountNo,
-        chequeNo: Number(form.chequeNo),
-        chequeAmount: Number(form.chequeAmount),
+        chequeNo: form.chequeNo.trim(),
+        chequeAmount: form.chequeAmount.trim(),
         payeeName: form.payeeName.trim(),
         issueDate: form.issueDate,
         mobileNo: customer.mobileNo,
       });
       setRefNo('PPS' + Date.now().toString().slice(-8));
+      setPpsStatus(result.resStatus);
       setStep('success');
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Verification failed');
-      throw err;
+      setApiError(err instanceof Error ? err.message : 'Submission failed');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -215,6 +244,12 @@ export default function PPS() {
             <div className="done-ic">✅</div>
             <h2>PPS Entry Submitted!</h2>
             <p>Your Positive Payment details have been registered. The cheque will be validated before payment processing.</p>
+            {ppsStatus && (
+              <div className="note info" style={{ textAlign: 'left', maxWidth: 430, margin: '0 auto 12px' }}>
+                <span>✅</span>
+                <span>Status: <strong>{ppsStatus}</strong></span>
+              </div>
+            )}
             <div className="refbox">
               <div className="rl">Reference Number</div>
               <div className="rv">{refNo}</div>
@@ -393,14 +428,8 @@ export default function PPS() {
           {apiError && <div className="note warn"><span>⚠️</span><span>{apiError}</span></div>}
           <div className="card">
             <div className="card-title"><span className="ic">✅</span>Review details</div>
-            <p className="card-sub">Confirm these match the physical cheque before you proceed.</p>
-            <div className="sum">
-              <div className="sumrow"><span className="k">Account</span><span className="v">{selectedAccount?.label}</span></div>
-              <div className="sumrow"><span className="k">Cheque Number</span><span className="v mono">{form.chequeNo}</span></div>
-              <div className="sumrow"><span className="k">Amount</span><span className="v">₹ {Number(form.chequeAmount).toLocaleString('en-IN')}</span></div>
-              <div className="sumrow"><span className="k">Issue Date</span><span className="v">{new Date(form.issueDate).toLocaleDateString('en-IN')}</span></div>
-              <div className="sumrow"><span className="k">Payee Name</span><span className="v">{form.payeeName}</span></div>
-            </div>
+            <p className="card-sub">Confirm these match the physical cheque, then proceed to OTP verification.</p>
+            {reviewSummary}
           </div>
         </>
       );
@@ -412,6 +441,23 @@ export default function PPS() {
           {apiError && <p className="ferr" style={{ marginBottom: 12 }}>⚠ {apiError}</p>}
           <OtpBoxes onComplete={handleOtpComplete} disabled={loading} />
         </div>
+      );
+    }
+
+    if (step === 'submit') {
+      return (
+        <>
+          <div className="note warn">
+            <span>⚠️</span>
+            <span>OTP verified. Review once more and submit to register this cheque for Positive Payment.</span>
+          </div>
+          {apiError && <div className="note warn"><span>⚠️</span><span>{apiError}</span></div>}
+          <div className="card">
+            <div className="card-title"><span className="ic">📤</span>Final submission</div>
+            <p className="card-sub">Once submitted, changes cannot be made.</p>
+            {reviewSummary}
+          </div>
+        </>
       );
     }
 
@@ -457,7 +503,7 @@ export default function PPS() {
         <Actions>
           <button type="button" className="btn btn-secondary" onClick={() => setStep('form')}>← Edit</button>
           <button type="button" className="btn btn-primary" disabled={loading} onClick={sendOtpAndProceed}>
-            {loading ? 'Sending OTP…' : 'Confirm & Get OTP →'}
+            {loading ? 'Sending OTP…' : 'Continue to OTP Verification →'}
           </button>
         </Actions>
       );
@@ -466,6 +512,16 @@ export default function PPS() {
       return (
         <Actions>
           <button type="button" className="btn btn-secondary" onClick={() => setStep('confirm')}>← Back</button>
+        </Actions>
+      );
+    }
+    if (step === 'submit') {
+      return (
+        <Actions>
+          <button type="button" className="btn btn-secondary" onClick={() => setStep('otp')} disabled={loading}>← Back</button>
+          <button type="button" className="btn btn-primary" disabled={loading || !otpVerified} onClick={submitPpsEntry}>
+            {loading ? 'Submitting…' : 'Submit PPS Entry →'}
+          </button>
         </Actions>
       );
     }
