@@ -1,5 +1,4 @@
 import Select from '../Select';
-import { RELATIONS } from '../../types';
 import { useRelations } from '../../hooks/useRelations';
 import { formatDDMMYYYY } from '../../utils/date';
 
@@ -63,7 +62,6 @@ export function validateNomineeFields(
 }
 
 const today = new Date().toISOString().split('T')[0];
-const RELATION_OPTIONS = RELATIONS.map(r => ({ value: r, label: r }));
 
 export default function NomineeFields({
   values,
