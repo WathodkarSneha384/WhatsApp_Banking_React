@@ -2,6 +2,7 @@ import jsSHA from 'jssha';
 import type { ServiceType, PMSocialSubservice } from '../types';
 import { cachedFetch } from './requestCache';
 import { getInsurancePremiumDetails } from '../utils/pmPremium';
+import { estimateFdInterestRate } from '../utils/fdMaturity';
 
 const BANK = '068';
 const API_BASE = '/dmCmsService/rest/endpoints';
@@ -320,6 +321,71 @@ export function getInsurancePremium(
 
 export function prefetchInsurancePremium(scheme: Extract<PMSocialSubservice, 'PMJJBY' | 'PMSBY'>) {
   return getInsurancePremium(scheme);
+}
+
+export async function fetchFdInterestRate(input: {
+  depositType: string;
+  periodType: 'Days' | 'Months';
+  depositPeriod: number;
+}): Promise<number> {
+  const fallbackRate = estimateFdInterestRate(input);
+
+  try {
+    const timeStamp = generateTimestamp();
+    const checkSum = generateChecksum(
+      SECRET_KEY,
+      VENDOR,
+      'getFdInterestRate',
+      USERNAME,
+      PASSWORD,
+      BANK,
+      input.depositType,
+      input.periodType,
+      String(input.depositPeriod),
+    );
+
+    const data = await postEndpoint<BankApiResponse & {
+      interestRate?: string;
+      fdInterestRate?: string;
+      utilityBeanList?: Array<{ key: string; value: string }>;
+    }>(
+      'getFdInterestRate',
+      {
+        ...basePayload('getFdInterestRate', checkSum),
+        timeStamp,
+        bank: BANK,
+        depositType: input.depositType,
+        periodType: input.periodType,
+        depositPeriod: String(input.depositPeriod),
+      },
+    );
+
+    const directRate = Number(data.interestRate ?? data.fdInterestRate);
+    if (Number.isFinite(directRate) && directRate > 0) return directRate;
+
+    if (Array.isArray(data.utilityBeanList)) {
+      const params: Record<string, string> = {};
+      data.utilityBeanList.forEach((item) => { params[item.key] = item.value; });
+      const listedRate = Number(params.INTRATE ?? params.RATE ?? params.interestRate);
+      if (Number.isFinite(listedRate) && listedRate > 0) return listedRate;
+    }
+  } catch {
+    // Fall back to tenure-based rate until API is confirmed in target environment.
+  }
+
+  return fallbackRate;
+}
+
+export function getFdInterestRate(input: {
+  depositType: string;
+  periodType: 'Days' | 'Months';
+  depositPeriod: number;
+}): Promise<number> {
+  return cachedFetch(
+    `fd-rate:${input.depositType}:${input.periodType}:${input.depositPeriod}`,
+    () => fetchFdInterestRate(input),
+    10 * 60 * 1000,
+  );
 }
 
 export async function sendOtp(mobileNo: string, otpRequiredFor: 'TDACCOUNTOPEN'): Promise<void> {

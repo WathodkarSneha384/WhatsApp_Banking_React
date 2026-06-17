@@ -735,6 +735,57 @@
   background: var(--error-soft);
 }
 
+.bank-app .form-input-readonly {
+  background: #f4f7f6;
+  color: var(--ink);
+  cursor: not-allowed;
+}
+
+.bank-app .form-input-readonly:focus {
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+.bank-app .fd-preview-card {
+  border-color: #c5d6f5;
+  background: #f0f4fb;
+  margin-bottom: 16px;
+}
+
+.bank-app .fd-preview-title {
+  font-size: 0.9rem;
+}
+
+.bank-app .fd-maturity-amount {
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.bank-app .fd-preview-note {
+  margin: 8px 16px 0;
+}
+
+.bank-app .fd-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.bank-app .fd-renewal-group .radio-group.horizontal {
+  margin-top: 10px;
+}
+
+.bank-app .fd-renewal-options .radio-option {
+  flex: 1;
+  min-width: 0;
+}
+
+.bank-app .fd-renewal-options .radio-label {
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
 .bank-app .form-hint {
   font-size: 0.76rem;
   color: var(--muted);
@@ -1147,6 +1198,38 @@
 
 @media (max-width: 680px) {
   .bank-app .form-grid-2 { grid-template-columns: 1fr; }
+
+  .bank-app .radio-group.horizontal {
+    flex-direction: column;
+  }
+
+  .bank-app .radio-group.horizontal .radio-option {
+    width: 100%;
+  }
+
+  .bank-app .summary-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .bank-app .summary-val {
+    text-align: left;
+    word-break: break-word;
+  }
+
+  .bank-app .card .summary-row {
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .bank-app .form-input,
+  .bank-app .form-select,
+  .bank-app .select-trigger {
+    font-size: 16px;
+  }
 
   .bank-app .flow-footer {
     padding: 12px 16px;

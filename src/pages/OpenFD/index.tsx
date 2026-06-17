@@ -6,6 +6,7 @@ import NomineeFields, { type NomineeFieldValues, type NomineeFieldErrors, valida
 import { useFlow } from '../../context/FlowContext';
 import { useRedirectHome } from '../../hooks/useRedirectHome';
 import { useAccounts } from '../../hooks/useAccounts';
+import { useFdInterestRate } from '../../hooks/useFdInterestRate';
 import { calculateFdMaturity, defaultRenewalType } from '../../utils/fdMaturity';
 
 type NomineeSource = 'existing' | 'new';
@@ -21,7 +22,6 @@ interface FDForm {
   savingAccount: string;
   depositAmount: string;
   depositType: string;
-  interestRate: string;
   interestPayMode: string;
   periodType: string;
   depositPeriod: string;
@@ -42,7 +42,7 @@ export default function OpenFD() {
   useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step]);
   const [form, setForm] = useState<FDForm>({
     savingAccount: '', depositAmount: '', depositType: '',
-    interestRate: '', interestPayMode: '', periodType: '', depositPeriod: '',
+    interestPayMode: '', periodType: '', depositPeriod: '',
     renewalType: '', nomineeSource: '',
   });
   const [renewalEnabled, setRenewalEnabled] = useState(false);
@@ -55,6 +55,19 @@ export default function OpenFD() {
   useRedirectHome(step === 'success');
 
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
+  const {
+    interestRate,
+    loading: interestRateLoading,
+    error: interestRateError,
+  } = useFdInterestRate(form.depositType, form.periodType, form.depositPeriod);
+
+  const interestRateLabel = interestRateLoading
+    ? 'Fetching rate…'
+    : interestRate !== null
+      ? `${interestRate}% p.a.`
+      : form.depositType && form.periodType && form.depositPeriod
+        ? 'Rate unavailable'
+        : 'Complete tenure details to fetch rate';
 
   const set = <K extends keyof FDForm>(k: K, v: FDForm[K]) => {
     setForm(f => {
@@ -89,18 +102,17 @@ export default function OpenFD() {
 
   const maturityDetails = useMemo(() => {
     const principal = Number(form.depositAmount);
-    const rate = Number(form.interestRate);
     const period = Number(form.depositPeriod);
-    if (!form.depositType || !form.interestPayMode || !form.periodType) return null;
+    if (!form.depositType || !form.interestPayMode || !form.periodType || interestRate === null) return null;
     return calculateFdMaturity({
       principal,
-      rate,
+      rate: interestRate,
       period,
       periodType: form.periodType as 'Days' | 'Months',
       depositType: form.depositType as 'Simple' | 'Compound',
       interestPayMode: form.interestPayMode,
     });
-  }, [form.depositAmount, form.interestRate, form.depositPeriod, form.periodType, form.depositType, form.interestPayMode]);
+  }, [form.depositAmount, form.depositPeriod, form.periodType, form.depositType, form.interestPayMode, interestRate]);
 
   const validate = (): boolean => {
     const e: FDErrors = {};
@@ -108,12 +120,14 @@ export default function OpenFD() {
     if (!form.depositAmount.trim() || isNaN(Number(form.depositAmount)) || Number(form.depositAmount) < 1000)
       e.depositAmount = 'Minimum deposit is ₹1,000';
     if (!form.depositType) e.depositType = 'Please select deposit type';
-    if (!form.interestRate.trim() || isNaN(Number(form.interestRate)) || Number(form.interestRate) <= 0)
-      e.interestRate = 'Enter a valid interest rate';
     if (!form.interestPayMode) e.interestPayMode = 'Please select interest pay mode';
     if (!form.periodType) e.periodType = 'Please select period type';
     if (!form.depositPeriod.trim() || isNaN(Number(form.depositPeriod)) || Number(form.depositPeriod) < 1)
       e.depositPeriod = 'Enter a valid deposit period';
+    else if (interestRateLoading)
+      e.depositPeriod = 'Fetching interest rate…';
+    else if (interestRate === null && form.depositType && form.periodType)
+      e.depositPeriod = interestRateError || 'Interest rate could not be fetched for this tenure';
     if (renewalEnabled && !form.renewalType) e.renewal = 'Please select a renewal option';
     if (!form.nomineeSource) e.nomineeSource = 'Please select nominee option';
     setErrors(e);
@@ -200,18 +214,6 @@ export default function OpenFD() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Interest Rate (% p.a.) <span className="required">*</span></label>
-          <input
-            className={`form-input ${errors.interestRate ? 'is-error' : ''}`}
-            placeholder="e.g. 7.5"
-            value={form.interestRate}
-            inputMode="decimal"
-            onChange={e => set('interestRate', e.target.value)}
-          />
-          {errors.interestRate && <p className="form-error">⚠ {errors.interestRate}</p>}
-        </div>
-
-        <div className="form-group">
           <label className="form-label">Interest Pay Mode <span className="required">*</span></label>
           <Select
             className={errors.interestPayMode ? 'is-error' : ''}
@@ -258,9 +260,25 @@ export default function OpenFD() {
           </div>
         </div>
 
-        {showMaturityPreview && maturityDetails && (
-          <div className="card" style={{ borderColor: '#c5d6f5', background: '#f0f4fb', marginBottom: 16 }}>
-            <div className="card-title" style={{ fontSize: 13 }}>
+        <div className="form-group">
+          <label className="form-label">Interest Rate (% p.a.)</label>
+          <input
+            className="form-input form-input-readonly"
+            value={interestRateLabel}
+            readOnly
+            aria-readonly="true"
+            tabIndex={-1}
+          />
+          <p className="form-hint">
+            {interestRateLoading
+              ? 'Fetching applicable rate from bank…'
+              : 'Rate is fetched automatically based on deposit type and tenure.'}
+          </p>
+        </div>
+
+        {showMaturityPreview && maturityDetails && interestRate !== null && (
+          <div className="card fd-preview-card">
+            <div className="card-title fd-preview-title">
               <span className="card-icon">📊</span>Maturity Preview
             </div>
             <div className="summary-row">
@@ -269,7 +287,7 @@ export default function OpenFD() {
             </div>
             <div className="summary-row">
               <span className="summary-key">Interest Rate</span>
-              <span className="summary-val">{Number(form.interestRate)}% p.a.</span>
+              <span className="summary-val">{interestRate}% p.a.</span>
             </div>
             <div className="summary-row">
               <span className="summary-key">Interest Earned</span>
@@ -277,20 +295,20 @@ export default function OpenFD() {
             </div>
             <div className="summary-row">
               <span className="summary-key">Maturity Amount</span>
-              <span className="summary-val" style={{ fontWeight: 700, color: 'var(--primary)' }}>
+              <span className="summary-val fd-maturity-amount">
                 ₹ {maturityDetails.maturityAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </span>
             </div>
             {form.interestPayMode !== 'On Maturity' && (
-              <p className="form-hint" style={{ marginTop: 8 }}>
+              <p className="form-hint fd-preview-note">
                 Interest is paid {form.interestPayMode.toLowerCase()}; maturity amount is the principal returned at tenure end.
               </p>
             )}
           </div>
         )}
 
-        <div className="form-group">
-          <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+        <div className="form-group fd-renewal-group">
+          <label className="form-label fd-checkbox-label">
             <input
               type="checkbox"
               checked={renewalEnabled}
@@ -301,7 +319,7 @@ export default function OpenFD() {
 
           {renewalEnabled && (
             <>
-              <div className="radio-group horizontal" style={{ marginTop: 10 }}>
+              <div className="radio-group horizontal fd-renewal-options">
                 {RENEWAL_TYPE_OPTIONS.map(option => (
                   <label key={option} className={`radio-option ${form.renewalType === option ? 'selected' : ''}`}>
                     <input
@@ -385,7 +403,7 @@ export default function OpenFD() {
         <div className="summary-row"><span className="summary-key">Debit Account</span><span className="summary-val">{acc?.label}</span></div>
         <div className="summary-row"><span className="summary-key">Deposit Amount</span><span className="summary-val">₹ {Number(form.depositAmount).toLocaleString('en-IN')}</span></div>
         <div className="summary-row"><span className="summary-key">Deposit Type</span><span className="summary-val">{form.depositType}</span></div>
-        <div className="summary-row"><span className="summary-key">Interest Rate</span><span className="summary-val">{Number(form.interestRate)}% p.a.</span></div>
+        <div className="summary-row"><span className="summary-key">Interest Rate</span><span className="summary-val">{interestRate !== null ? `${interestRate}% p.a.` : '—'}</span></div>
         <div className="summary-row"><span className="summary-key">Interest Pay Mode</span><span className="summary-val">{form.interestPayMode}</span></div>
         <div className="summary-row"><span className="summary-key">Period</span><span className="summary-val">{form.depositPeriod} {form.periodType}</span></div>
         {maturityDetails && <>
