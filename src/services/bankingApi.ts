@@ -478,6 +478,7 @@ export async function doProcessPMJJBYSBY(input: {
   guardianName?: string;
   guardianRelationCode?: number;
   nomineeIsMinor?: boolean;
+  ruralOrUrban: 'R' | 'U';
 }): Promise<{ referenceNumber: string }> {
   const timeStamp = generateTimestamp();
   const checkSum = generateChecksum(
@@ -513,7 +514,7 @@ export async function doProcessPMJJBYSBY(input: {
       guardianEmail: '',
       guardianDateOfBirth: '',
       guardianRelationCode: input.guardianRelationCode ? Number(input.guardianRelationCode) : 0,
-      ruralOrUrban: 'R',
+      ruralOrUrban: input.ruralOrUrban,
     },
   );
 

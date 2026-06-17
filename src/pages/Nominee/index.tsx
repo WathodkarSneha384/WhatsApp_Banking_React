@@ -10,8 +10,8 @@ import { useAccounts } from '../../hooks/useAccounts';
 import { nomineeRegistration, sendOtp, validateOtp, verifyExistingNominees } from '../../services/bankingApi';
 
 type NomineeType = 'new' | 'update';
-type Step = 'select' | 'otp' | 'form' | 'confirm' | 'success';
-const STEP_NUM: Record<Step, number> = { select: 1, otp: 2, form: 3, confirm: 4, success: 5 };
+type Step = 'select' | 'form' | 'confirm' | 'otp' | 'submit' | 'success';
+const STEP_NUM: Record<Step, number> = { select: 1, form: 2, confirm: 3, otp: 4, submit: 5, success: 6 };
 
 const EMPTY_NOMINEE: NomineeFieldValues = {
   nomineeName: '', nomineeDob: '', relation: '',
@@ -87,15 +87,32 @@ export default function Nominee() {
 
   const acc = accounts.find(a => a.value === accountNo);
 
+  const isMinorNominee = nominee.nomineeDob
+    ? (new Date().getFullYear() - new Date(nominee.nomineeDob).getFullYear()) < 18
+    : false;
+
+  const reviewSummary = (
+    <>
+      <div className="summary-row"><span className="summary-key">Account</span><span className="summary-val">{acc?.label}</span></div>
+      <div className="summary-row"><span className="summary-key">Action</span><span className="summary-val">{type === 'new' ? 'New Nominee' : 'Update Nominee'}</span></div>
+      <div className="divider" />
+      <div className="summary-row"><span className="summary-key">Nominee Name</span><span className="summary-val">{nominee.nomineeName}</span></div>
+      <div className="summary-row"><span className="summary-key">Date of Birth</span><span className="summary-val">{new Date(nominee.nomineeDob).toLocaleDateString('en-IN')}</span></div>
+      <div className="summary-row"><span className="summary-key">Relationship</span><span className="summary-val">{nominee.relation}</span></div>
+      <div className="summary-row"><span className="summary-key">Minor</span><span className="summary-val">{isMinorNominee ? 'Yes' : 'No'}</span></div>
+      {isMinorNominee && <>
+        <div className="divider" />
+        <div className="summary-row"><span className="summary-key">Guardian Name</span><span className="summary-val">{nominee.guardianName}</span></div>
+        <div className="summary-row"><span className="summary-key">Guardian Date of Birth</span><span className="summary-val">{formatDDMMYYYY(nominee.guardianDob)}</span></div>
+        <div className="summary-row"><span className="summary-key">Guardian Relation</span><span className="summary-val">{nominee.guardianRelation}</span></div>
+      </>}
+    </>
+  );
 
   const handleSubmit = async () => {
     try {
       setLoading(true);
-
-      const isMinorNominee =
-        nominee.nomineeDob
-          ? (new Date().getFullYear() - new Date(nominee.nomineeDob).getFullYear()) < 18
-          : false;
+      setApiError('');
 
       const response = await nomineeRegistration({
         accountNumber: accountNo,
@@ -111,11 +128,11 @@ export default function Nominee() {
       if (response?.status === '00' || response?.errorCode === '00') {
         setStep('success');
       } else {
-        alert(response?.errorMsg || 'Nominee registration failed');
+        setApiError(response?.errorMsg || 'Nominee registration failed');
       }
     } catch (error) {
       console.error('Nominee registration failed:', error);
-      alert('Something went wrong. Please try again.');
+      setApiError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -139,7 +156,7 @@ export default function Nominee() {
     try {
       await validateOtp(customer.mobileNo, otp, 'TDACCOUNTOPEN');
       setOtpVerified(true);
-      //setStep('submit');
+      setStep('submit');
     } catch (err) {
       setApiError(err instanceof Error ? err.message : 'OTP verification failed');
       throw err;
@@ -243,43 +260,15 @@ export default function Nominee() {
       <Actions>
         <button
           className="btn btn-primary"
-          disabled={loading || nomineeExists === true}
-          onClick={async () => {
+          disabled={nomineeExists === true}
+          onClick={() => {
             if (validateSelect() && nomineeExists !== true) {
-              await sendOtpAndProceed();
+              setStep('form');
             }
           }}
         >
-          {loading ? 'Sending OTP...' : 'Continue →'}
+          Continue →
         </button>
-      </Actions>
-    </>
-  );
-
-  /* ── OTP VERIFICATION ── */
-  if (step === 'otp') return (
-    <>      <div className="flow-content">
-      <div className="card otp-screen">
-        <div className="card-title" style={{ justifyContent: 'center' }}><span className="card-icon">📱</span>OTP Verification</div>
-        <p className="otp-subtitle">Enter the 5-digit OTP sent to your registered mobile number to proceed with nominee {type === 'new' ? 'registration' : 'update'}</p>
-        <OTPInput
-          onComplete={async (otp) => {
-            setLoading(true);
-
-            try {
-              await handleOtpComplete(otp);
-              setStep('form');
-            } finally {
-              setLoading(false);
-            }
-          }}
-        />
-        {loading && <p style={{ marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>Verifying…</p>}
-        <p className="resend-text">Didn't receive OTP? <span className="resend-link">Resend OTP</span></p>
-      </div>
-    </div>
-      <Actions>
-        <button className="btn btn-secondary" onClick={() => setStep('select')}>← Back</button>
       </Actions>
     </>
   );
@@ -289,17 +278,12 @@ export default function Nominee() {
     <>      <div className="flow-content">
       <div className="card">
         <div className="card-title"><span className="card-icon">✏️</span>Nominee Details</div>
-        {/* Nominee Name — Input text */}
-        {/* Nominee DOB — Calendar selection */}
-        {/* Relationship — Drop down */}
-        {/* Nominee Minor — auto-calculated from DOB */}
-        {/* Guardian fields if minor */}
         <NomineeFields values={nominee} errors={nomineeErrors} onChange={setNomineeField} relationType='relation'/>
       </div>
     </div>
       <Actions>
         <div className="btn-row">
-          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('otp')}>← Back</button>
+          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('select')}>← Back</button>
           <button className="btn btn-primary" style={{ flex: 2 }} onClick={() => { if (validateForm()) setStep('confirm'); }}>
             Review →
           </button>
@@ -310,38 +294,79 @@ export default function Nominee() {
 
   /* ── CONFIRM ── */
   if (step === 'confirm') {
-    const isMinorNominee = nominee.nomineeDob
-      ? (new Date().getFullYear() - new Date(nominee.nomineeDob).getFullYear()) < 18
-      : false;
     return (
       <>        <div className="flow-content">
         <div className="alert alert-warning">
           <span>⚠️</span>
-          <span>Verify all details before confirming the nominee {type === 'new' ? 'registration' : 'update'}.</span>
+          <span>Verify all details, then proceed to OTP verification before final submission.</span>
         </div>
+        {apiError && <div className="alert alert-warning"><span>⚠️</span><span>{apiError}</span></div>}
         <div className="card">
           <div className="card-title"><span className="card-icon">✅</span>Review Details</div>
-          <div className="summary-row"><span className="summary-key">Account</span><span className="summary-val">{acc?.label}</span></div>
-          <div className="summary-row"><span className="summary-key">Action</span><span className="summary-val">{type === 'new' ? 'New Nominee' : 'Update Nominee'}</span></div>
-          <div className="divider" />
-          <div className="summary-row"><span className="summary-key">Nominee Name</span><span className="summary-val">{nominee.nomineeName}</span></div>
-          <div className="summary-row"><span className="summary-key">Date of Birth</span><span className="summary-val">{new Date(nominee.nomineeDob).toLocaleDateString('en-IN')}</span></div>
-          <div className="summary-row"><span className="summary-key">Relationship</span><span className="summary-val">{nominee.relation}</span></div>
-          <div className="summary-row"><span className="summary-key">Minor</span><span className="summary-val">{isMinorNominee ? 'Yes' : 'No'}</span></div>
-          {isMinorNominee && <>
-            <div className="divider" />
-            <div className="summary-row"><span className="summary-key">Guardian Name</span><span className="summary-val">{nominee.guardianName}</span></div>
-            <div className="summary-row"><span className="summary-key">Guardian Date of Birth</span><span className="summary-val">{formatDDMMYYYY(nominee.guardianDob)}</span></div>
-            <div className="summary-row"><span className="summary-key">Guardian Relation</span><span className="summary-val">{nominee.guardianRelation}</span></div>
-          </>}
+          {reviewSummary}
         </div>
       </div>
         <Actions>
           <div className="btn-row">
             <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('form')}>← Edit</button>
             <button className="btn btn-primary" style={{ flex: 2 }} disabled={loading}
+              onClick={() => { if (validateForm()) sendOtpAndProceed(); }}>
+              {loading ? 'Sending OTP…' : 'Continue to OTP Verification →'}
+            </button>
+          </div>
+        </Actions>
+      </>
+    );
+  }
+
+  /* ── OTP VERIFICATION ── */
+  if (step === 'otp') return (
+    <>      <div className="flow-content">
+      <div className="card otp-screen">
+        <div className="card-title" style={{ justifyContent: 'center' }}><span className="card-icon">📱</span>OTP Verification</div>
+        <p className="otp-subtitle">Enter the 5-digit OTP sent to your registered mobile number to verify before final submission</p>
+        {apiError && <p className="form-error">⚠ {apiError}</p>}
+        <OTPInput
+          onComplete={async (otp) => {
+            setLoading(true);
+            try {
+              await handleOtpComplete(otp);
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+        {loading && <p style={{ marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>Verifying…</p>}
+        <p className="resend-text">Didn't receive OTP? <span className="resend-link">Resend OTP</span></p>
+      </div>
+    </div>
+      <Actions>
+        <button className="btn btn-secondary" onClick={() => setStep('confirm')}>← Back</button>
+      </Actions>
+    </>
+  );
+
+  /* ── FINAL SUBMIT ── */
+  if (step === 'submit') {
+    return (
+      <>        <div className="flow-content">
+        <div className="alert alert-warning">
+          <span>⚠️</span>
+          <span>OTP verified. Review once more and submit to register the nominee.</span>
+        </div>
+        {apiError && <div className="alert alert-warning"><span>⚠️</span><span>{apiError}</span></div>}
+        <div className="card">
+          <div className="card-title"><span className="card-icon">📤</span>Final Submission</div>
+          <p className="card-sub" style={{ marginBottom: 12 }}>Once submitted, changes cannot be made from this flow.</p>
+          {reviewSummary}
+        </div>
+      </div>
+        <Actions>
+          <div className="btn-row">
+            <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('otp')} disabled={loading}>← Back</button>
+            <button className="btn btn-primary" style={{ flex: 2 }} disabled={loading || !otpVerified}
               onClick={handleSubmit}>
-              {loading ? 'Submitting…' : 'Submit →'}
+              {loading ? 'Submitting…' : 'Submit Nominee Registration →'}
             </button>
           </div>
         </Actions>

@@ -41,7 +41,7 @@ const serviceRoutes: Record<ServiceType, ServiceConfig> = {
     label: 'Nominee Registration',
     title: 'Nominee Registration',
     subtitle: 'Nominee Registration',
-    steps: ['Select Account', 'Verify OTP', 'Nominee Details', 'Review', 'Done'],
+    steps: ['Select Account', 'Nominee Details', 'Review', 'Verify OTP', 'Submit', 'Done'],
     icon: '👤',
     desc: 'Add or update a nominee for your savings account so benefits reach the right person.',
   },

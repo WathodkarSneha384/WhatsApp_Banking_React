@@ -17,6 +17,7 @@ import { doProcessPMJJBYSBY, sendOtp, validateOtp } from '../../services/api';
 import { PENSION_AMOUNT_OPTIONS } from '../../utils/pmPremium';
 
 type NomineeSource = 'existing' | 'new';
+type RuralOrUrban = 'Rural' | 'Urban';
 type Step = 'form' | 'confirm' | 'otp' | 'success';
 const STEP_NUM: Record<Step, number> = { form: 1, confirm: 2, otp: 3, success: 4 };
 
@@ -61,6 +62,7 @@ export default function PMSocial() {
   const [nomineeSource, setNomineeSource] = useState<NomineeSource | ''>('');
   const [nominee, setNominee] = useState<NomineeFieldValues>(EMPTY_NOMINEE);
   const [nomineeErrors, setNomineeErrors] = useState<NomineeFieldErrors>({});
+  const [ruralOrUrban, setRuralOrUrban] = useState<RuralOrUrban | ''>('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
@@ -89,6 +91,9 @@ export default function PMSocial() {
       if (!installmentFreq) e.installmentFreq = 'Please select installment frequency';
     }
     if (!nomineeSource) e.nomineeSource = 'Please select nominee option';
+    if ((scheme === 'PMJJBY' || scheme === 'PMSBY') && !ruralOrUrban) {
+      e.ruralOrUrban = 'Please select Rural or Urban';
+    }
     setFormErrors(e);
     if (Object.keys(e).length > 0) return false;
 
@@ -142,6 +147,7 @@ export default function PMSocial() {
         guardianName: nomineeSource === 'new' && nomineeIsMinor ? nominee.guardianName : '',
         guardianRelationCode: nomineeSource === 'new' && nomineeIsMinor ? Number(nominee.guardianRelation) : 0,
         nomineeIsMinor: nomineeSource === 'new' && nomineeIsMinor,
+        ruralOrUrban: ruralOrUrban === 'Urban' ? 'U' : 'R',
       });
       setRefNo(result.referenceNumber);
       setStep('success');
@@ -286,6 +292,29 @@ export default function PMSocial() {
               <span>The nominee already registered with account {acc?.label} will be used for this scheme.</span>
             </div>
           )}
+
+          {(scheme === 'PMJJBY' || scheme === 'PMSBY') && (
+            <div className="form-group">
+              <label className="form-label">Area Type <span className="required">*</span></label>
+              <div className="radio-group horizontal">
+                {(['Rural', 'Urban'] as const).map(option => (
+                  <label key={option} className={`radio-option ${ruralOrUrban === option ? 'selected' : ''}`}>
+                    <input
+                      type="radio"
+                      name="ruralOrUrban"
+                      checked={ruralOrUrban === option}
+                      onChange={() => {
+                        setRuralOrUrban(option);
+                        setFormErrors(f => ({ ...f, ruralOrUrban: '' }));
+                      }}
+                    />
+                    <span className="radio-label">{option}</span>
+                  </label>
+                ))}
+              </div>
+              {formErrors.ruralOrUrban && <p className="form-error">⚠ {formErrors.ruralOrUrban}</p>}
+            </div>
+          )}
         </div>
       </div>
       <Actions>
@@ -330,6 +359,9 @@ export default function PMSocial() {
             <div className="summary-row"><span className="summary-key">Nominee DOB</span><span className="summary-val">{new Date(nominee.nomineeDob).toLocaleDateString('en-IN')}</span></div>
             <div className="summary-row"><span className="summary-key">Relationship</span><span className="summary-val">{nominee.relation}</span></div>
           </>}
+          {(scheme === 'PMJJBY' || scheme === 'PMSBY') && ruralOrUrban && (
+            <div className="summary-row"><span className="summary-key">Area Type</span><span className="summary-val">{ruralOrUrban}</span></div>
+          )}
         </div>
       </div>
       <Actions>
