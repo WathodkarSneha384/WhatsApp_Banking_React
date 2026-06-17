@@ -8,6 +8,7 @@ import { useRedirectHome } from '../../hooks/useRedirectHome';
 import { useAccounts } from '../../hooks/useAccounts';
 import { useFdInterestRate } from '../../hooks/useFdInterestRate';
 import { calculateFdMaturity, defaultRenewalType } from '../../utils/fdMaturity';
+import { useCalculateMaturity } from '../../hooks/useCalculateMaturity';
 
 type NomineeSource = 'existing' | 'new';
 type RenewalType = 'Renew With Interest' | 'Renew Without Interest';
@@ -61,6 +62,18 @@ export default function OpenFD() {
     error: interestRateError,
   } = useFdInterestRate(form.depositType, form.periodType, form.depositPeriod);
 
+
+  const {
+maturityData,
+  loading: maturityLoading,
+  error: maturityError,
+} = useCalculateMaturity(
+  form.depositAmount,
+  '02',
+  form.periodType === 'Months' ? form.depositPeriod : '0',
+  form.periodType === 'Days' ? form.depositPeriod : '0',
+);
+
   const interestRateLabel = interestRateLoading
     ? 'Fetching rate…'
     : interestRate !== null
@@ -100,20 +113,7 @@ export default function OpenFD() {
     }
   };
 
-  const maturityDetails = useMemo(() => {
-    const principal = Number(form.depositAmount);
-    const period = Number(form.depositPeriod);
-    if (!form.depositType || !form.interestPayMode || !form.periodType || interestRate === null) return null;
-    return calculateFdMaturity({
-      principal,
-      rate: interestRate,
-      period,
-      periodType: form.periodType as 'Days' | 'Months',
-      depositType: form.depositType as 'Simple' | 'Compound',
-      interestPayMode: form.interestPayMode,
-    });
-  }, [form.depositAmount, form.depositPeriod, form.periodType, form.depositType, form.interestPayMode, interestRate]);
-
+ 
   const validate = (): boolean => {
     const e: FDErrors = {};
     if (!form.savingAccount) e.savingAccount = 'Please select an account';
@@ -144,7 +144,7 @@ export default function OpenFD() {
   const acc = accounts.find(a => a.value === form.savingAccount);
   const interestModes = form.depositType === 'Compound' ? INTEREST_MODES_COMPOUND : INTEREST_MODES_SIMPLE;
   const renewalDisplay = renewalEnabled ? form.renewalType : 'Not to Renew';
-  const showMaturityPreview = maturityDetails !== null;
+  const showMaturityPreview = maturityData !== null;
 
   /* ── SUCCESS ── */
   if (step === 'success') return (
@@ -276,7 +276,7 @@ export default function OpenFD() {
           </p>
         </div>
 
-        {showMaturityPreview && maturityDetails && interestRate !== null && (
+        {showMaturityPreview && maturityData && interestRate !== null && (
           <div className="card fd-preview-card">
             <div className="card-title fd-preview-title">
               <span className="card-icon">📊</span>Maturity Preview
@@ -291,12 +291,12 @@ export default function OpenFD() {
             </div>
             <div className="summary-row">
               <span className="summary-key">Interest Earned</span>
-              <span className="summary-val">₹ {maturityDetails.interestEarned.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+              <span className="summary-val">₹ {maturityData.interestEarned.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
             </div>
             <div className="summary-row">
               <span className="summary-key">Maturity Amount</span>
               <span className="summary-val fd-maturity-amount">
-                ₹ {maturityDetails.maturityAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                ₹ {maturityData.maturityAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
               </span>
             </div>
             {form.interestPayMode !== 'On Maturity' && (
@@ -406,9 +406,9 @@ export default function OpenFD() {
         <div className="summary-row"><span className="summary-key">Interest Rate</span><span className="summary-val">{interestRate !== null ? `${interestRate}% p.a.` : '—'}</span></div>
         <div className="summary-row"><span className="summary-key">Interest Pay Mode</span><span className="summary-val">{form.interestPayMode}</span></div>
         <div className="summary-row"><span className="summary-key">Period</span><span className="summary-val">{form.depositPeriod} {form.periodType}</span></div>
-        {maturityDetails && <>
-          <div className="summary-row"><span className="summary-key">Interest Earned</span><span className="summary-val">₹ {maturityDetails.interestEarned.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
-          <div className="summary-row"><span className="summary-key">Maturity Amount</span><span className="summary-val">₹ {maturityDetails.maturityAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
+        {maturityData && <>
+          <div className="summary-row"><span className="summary-key">Interest Earned</span><span className="summary-val">₹ {maturityData.interestEarned.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
+          <div className="summary-row"><span className="summary-key">Maturity Amount</span><span className="summary-val">₹ {maturityData.maturityAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
         </>}
         <div className="summary-row"><span className="summary-key">Renewal</span><span className="summary-val">{renewalDisplay}</span></div>
         <div className="divider" />

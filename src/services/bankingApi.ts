@@ -646,3 +646,75 @@ export async function nomineeRegistration(input: {
 
   return response;
 }
+
+
+
+export async function fetchCalculateMaturity(
+  depositAmount: number,
+  schemeCode: string,
+  months: number,
+  days: number,
+) {
+  const timeStamp = generateTimestamp();
+
+  console.log('Calculating Maturity with:', {
+    depositAmount,
+    schemeCode,
+    months,
+    days,
+  });
+ const checksumParams = [
+  String(depositAmount),
+  schemeCode,
+  String(months)
+];
+
+
+
+if (days > 0) {
+  checksumParams.push(String(days));
+}
+
+console.log('Checksum Parameters:', checksumParams);
+
+const checkSum = generateChecksum(
+  SECRET_KEY,
+  VENDOR,
+  'calculateMaturity_MB',
+  USERNAME,
+  PASSWORD,
+  ...checksumParams,
+);
+  console.log('Generated Checksum:', checkSum);
+
+  return postEndpoint(
+    'calculateMaturity_MB',
+    {
+      ...basePayload('calculateMaturity_MB', checkSum),
+      timeStamp,
+      depositAmount,
+      schemeCode,
+      months,
+      days,
+    },
+  );
+}
+
+
+export function calculateMaturity(
+  depositAmount: number,
+  schemeCode: string,
+  months: number,
+  days: number,
+) {
+  return cachedFetch(
+    `maturity:${depositAmount}:${schemeCode}:${months}:${days}`,
+    () => fetchCalculateMaturity(
+      depositAmount,
+      schemeCode,
+      months,
+      days,
+    ),
+    5 * 60 * 1000,
+  );
+}
