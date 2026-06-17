@@ -231,20 +231,33 @@ export function prefetchPPSParameters() {
   return getPPSParameters();
 }
 
-export async function fetchRelations(): Promise<RelationOption[]> {
+export async function fetchRelations(
+  loadingFor: 'relation' | 'pmyrelation'
+): Promise<RelationOption[]> {
+
   const timeStamp = generateTimestamp();
+
   const checkSum = generateChecksum(
-    SECRET_KEY, VENDOR, 'loadingpopupaction', USERNAME, PASSWORD, 'relation',
+    SECRET_KEY,
+    VENDOR,
+    'loadingpopupaction',
+    USERNAME,
+    PASSWORD,
+    loadingFor
   );
 
-  const data = await postEndpoint<BankApiResponse & { utilityBeanList?: Array<{ key: string; value: string }> }>(
+  const data = await postEndpoint<
+    BankApiResponse & {
+      utilityBeanList?: Array<{ key: string; value: string }>;
+    }
+  >(
     'loadingpopupaction',
     {
       ...basePayload('loadingpopupaction', checkSum),
       timeStamp,
       bank: BANK,
-      loadingFor: 'relation',
-    },
+      loadingFor, // <-- use parameter here
+    }
   );
 
   if (!Array.isArray(data.utilityBeanList)) return [];
@@ -255,8 +268,14 @@ export async function fetchRelations(): Promise<RelationOption[]> {
   }));
 }
 
-export function getRelations(): Promise<RelationOption[]> {
-  return cachedFetch('relations', fetchRelations, 30 * 60 * 1000);
+export function getRelations(
+  loadingFor: 'relation' | 'pmyrelation' = 'relation'
+): Promise<RelationOption[]> {
+  return cachedFetch(
+    `relations_${loadingFor}`,
+    () => fetchRelations(loadingFor),
+    30 * 60 * 1000
+  );
 }
 
 export async function fetchInsurancePremium(
@@ -454,10 +473,10 @@ export async function doProcessPMJJBYSBY(input: {
   insuranceCompany: 'PMJJBY' | 'PMSBY';
   totalPremiumAmount: number;
   nomineeName: string;
-  nomineeRelationCode: string;
+  nomineeRelationCode: number;
   nomineeDob: string;
   guardianName?: string;
-  guardianRelationCode?: string;
+  guardianRelationCode?: number;
   nomineeIsMinor?: boolean;
 }): Promise<{ referenceNumber: string }> {
   const timeStamp = generateTimestamp();
@@ -467,16 +486,9 @@ export async function doProcessPMJJBYSBY(input: {
     'doProcessPMJJBYSBY',
     USERNAME,
     PASSWORD,
-    BANK,
-    input.customerId,
     input.debitAccountNumber,
-    input.insuranceCompany,
-    String(input.totalPremiumAmount),
+    input.customerId,
     input.nomineeName,
-    input.nomineeRelationCode,
-    input.nomineeDob,
-    input.guardianName ?? '',
-    input.guardianRelationCode ?? '',
   );
 
   const data = await postEndpoint<BankApiResponse & { referenceNumber?: string }>(
@@ -500,7 +512,7 @@ export async function doProcessPMJJBYSBY(input: {
       guardianMobileNo: '',
       guardianEmail: '',
       guardianDateOfBirth: '',
-      guardianRelationCode: input.guardianRelationCode ? Number(input.guardianRelationCode) : '',
+      guardianRelationCode: input.guardianRelationCode ? Number(input.guardianRelationCode) : 0,
       ruralOrUrban: 'R',
     },
   );

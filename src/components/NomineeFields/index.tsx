@@ -24,6 +24,7 @@ interface Props {
   onChange: (key: keyof NomineeFieldValues, value: string) => void;
   showName?: boolean;
   showGuardianDob?: boolean;
+  relationType?: 'relation' | 'pmyrelation';
 }
 
 function isMinor(dob: string): boolean {
@@ -70,8 +71,9 @@ export default function NomineeFields({
   onChange,
   showName = true,
   showGuardianDob = true,
+ relationType = 'relation',
 }: Props) {
-  const { relations: relationOptions } = useRelations();
+  const { relations: relationOptions } = useRelations(relationType);
 
   const minor = isMinor(values.nomineeDob);
   const age = calcAge(values.nomineeDob);

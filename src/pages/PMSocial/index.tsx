@@ -137,10 +137,10 @@ export default function PMSocial() {
         insuranceCompany: scheme,
         totalPremiumAmount: premiumDetails?.totalPremium ?? 0,
         nomineeName: nomineeSource === 'new' ? nominee.nomineeName : '',
-        nomineeRelationCode: nomineeSource === 'new' ? nominee.relation : '',
+        nomineeRelationCode: nomineeSource === 'new' ? Number(nominee.relation) : 0,
         nomineeDob: nomineeSource === 'new' ? nominee.nomineeDob : '',
         guardianName: nomineeSource === 'new' && nomineeIsMinor ? nominee.guardianName : '',
-        guardianRelationCode: nomineeSource === 'new' && nomineeIsMinor ? nominee.guardianRelation : '',
+        guardianRelationCode: nomineeSource === 'new' && nomineeIsMinor ? Number(nominee.guardianRelation) : 0,
         nomineeIsMinor: nomineeSource === 'new' && nomineeIsMinor,
       });
       setRefNo(result.referenceNumber);
@@ -207,7 +207,7 @@ export default function PMSocial() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Debit Savings Account <span className="required">*</span></label>
+            <label className="form-label">Debit Account <span className="required">*</span></label>
             <div className="radio-group">
               {accountsLoading && <p className="form-hint">Loading accounts…</p>}
               {accounts.map(a => (
@@ -274,6 +274,7 @@ export default function PMSocial() {
                   errors={nomineeErrors}
                   onChange={setNomineeField}
                   showGuardianDob={false}
+                  relationType='pmyrelation'
                 />
               </Suspense>
             </>

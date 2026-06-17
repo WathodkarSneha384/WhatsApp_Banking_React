@@ -253,7 +253,7 @@ export default function OpenFD() {
             {/* Relation — Drop down */}
             {/* Nominee Minor — auto from DOB */}
             {/* Guardian fields if minor */}
-            <NomineeFields values={nominee} errors={nomineeErrors} onChange={setNomineeField} />
+            <NomineeFields values={nominee} errors={nomineeErrors} onChange={setNomineeField} relationType='relation' />
           </>
         )}
 

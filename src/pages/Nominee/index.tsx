@@ -294,7 +294,7 @@ export default function Nominee() {
         {/* Relationship — Drop down */}
         {/* Nominee Minor — auto-calculated from DOB */}
         {/* Guardian fields if minor */}
-        <NomineeFields values={nominee} errors={nomineeErrors} onChange={setNomineeField} />
+        <NomineeFields values={nominee} errors={nomineeErrors} onChange={setNomineeField} relationType='relation'/>
       </div>
     </div>
       <Actions>
