@@ -9,6 +9,7 @@ import { useAccounts } from '../../hooks/useAccounts';
 import { useFdInterestRate } from '../../hooks/useFdInterestRate';
 import { calculateFdMaturity, defaultRenewalType } from '../../utils/fdMaturity';
 import { useCalculateMaturity } from '../../hooks/useCalculateMaturity';
+import { openFDAccount, sendOtp, validateOtp, verifyExistingNominees } from '../../services/bankingApi';
 
 type NomineeSource = 'existing' | 'new';
 type RenewalType = 'Renew With Interest' | 'Renew Without Interest';
@@ -56,24 +57,78 @@ export default function OpenFD() {
   useRedirectHome(step === 'success');
 
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
+  const [existingNominee, setExistingNominee] = useState<any>(null);
+  const [nomineeLoading, setNomineeLoading] = useState(false);
+   const [apiError, setApiError] = useState('');
+   const [otpVerified, setOtpVerified] = useState(false);
+
   const {
     interestRate,
     loading: interestRateLoading,
     error: interestRateError,
   } = useFdInterestRate(form.depositType, form.periodType, form.depositPeriod);
 
+  const fetchExistingNominee = async (accountNumber: string) => {
+    if (!accountNumber) {
+      setExistingNominee(null);
+      return;
+    }
 
-  const {
-maturityData,
-  loading: maturityLoading,
-  error: maturityError,
-} = useCalculateMaturity(
-  form.depositAmount,
-  '02',
-  form.periodType === 'Months' ? form.depositPeriod : '0',
-  form.periodType === 'Days' ? form.depositPeriod : '0',
-);
+    try {
+      setNomineeLoading(true);
 
+      const response = await verifyExistingNominees({
+        accountNumber,
+      });
+
+      console.log('Nominee Response:', response);
+
+      if (
+        response?.status === '00' ||
+        response?.errorCode === '00'
+      ) {
+        setExistingNominee(response.nomineeList?.[0] || null);
+      } else {
+        setExistingNominee(null);
+      }
+    } catch (error) {
+      console.error('Error fetching nominee:', error);
+      setExistingNominee(null);
+    } finally {
+      setNomineeLoading(false);
+    }
+  };
+  const nomineeOptions = [];
+
+  if (existingNominee) {
+    nomineeOptions.push({
+      value: 'existing',
+      label: 'Use Debit Account Nominee',
+    });
+  }
+
+  nomineeOptions.push({
+    value: 'new',
+    label: 'Add New Nominee',
+  });
+
+
+  useEffect(() => {
+  if (!existingNominee && form.nomineeSource === 'existing') {
+    setForm(prev => ({
+      ...prev,
+      nomineeSource: '',
+    }));
+  }
+}, [existingNominee]);
+
+  useEffect(() => {
+    if (form.savingAccount) {
+      fetchExistingNominee(form.savingAccount);
+    } else {
+      setExistingNominee(null);
+    }
+  }, [form.savingAccount]);
   const interestRateLabel = interestRateLoading
     ? 'Fetching rate…'
     : interestRate !== null
@@ -81,6 +136,21 @@ maturityData,
       : form.depositType && form.periodType && form.depositPeriod
         ? 'Rate unavailable'
         : 'Complete tenure details to fetch rate';
+
+  const {
+    maturityData,
+    loading: maturityLoading,
+    error: maturityError,
+  } = useCalculateMaturity(
+    form.depositAmount,
+    '02',
+    form.periodType === 'Months' ? form.depositPeriod : '0',
+    form.periodType === 'Days' ? form.depositPeriod : '0',
+  );
+
+  useEffect(() => {
+    console.log('maturityData from hook:', maturityData);
+  }, [maturityData]);
 
   const set = <K extends keyof FDForm>(k: K, v: FDForm[K]) => {
     setForm(f => {
@@ -112,8 +182,97 @@ maturityData,
       setForm(f => ({ ...f, renewalType: '' }));
     }
   };
-
  
+
+ const sendOtpAndProceed = async () => {
+    setLoading(true);
+    setApiError('');
+    setOtpVerified(false);
+    try {
+      await sendOtp(customer.mobileNo, 'TDACCOUNTOPEN');
+      setStep('otp');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+  const handleOtpComplete = async (otp: string) => {
+  setApiError('');
+
+  try {
+    // 1. Verify OTP
+    await validateOtp(
+      customer.mobileNo,
+      otp,
+      'TDACCOUNTOPEN'
+    );
+
+    // 2. Open FD after OTP success
+    const response = await openFDAccount({
+      customerCode: customer.customerId,
+      depositAmount: form.depositAmount,
+
+      months:
+        form.periodType === 'Months'
+          ? Number(form.depositPeriod)
+          : 0,
+
+      days:
+        form.periodType === 'Days'
+          ? Number(form.depositPeriod)
+          : 0,
+
+      debitAccountNumber: form.savingAccount,
+      repayAccountNumber: form.savingAccount,
+
+      closeonMaturity: 'Y',
+      autoRenewal: renewalEnabled ? 'Y' : 'N',
+
+      depositType:
+        form.depositType === 'Simple'
+          ? 'S'
+          : 'C',
+
+      interestPayMode:
+        form.interestPayMode === 'Monthly'
+          ? 'M'
+          : form.interestPayMode === 'Quarterly'
+          ? 'Q'
+          : form.interestPayMode === 'Half Yearly'
+          ? 'H'
+          : form.interestPayMode === 'Yearly'
+          ? 'Y'
+          : 'O',
+
+      nomineeRequired: 'Y',
+
+      nomineeAsdebitAccount:
+        form.nomineeSource === 'existing'
+          ? 'Y'
+          : 'N',
+
+      nomineeisMinor: 'N',
+    });
+
+    console.log('FD Open Response', response);
+
+    // Optional:
+    // setFdAccNo(response.fdAccountNo);
+
+    setOtpVerified(true);
+    setStep('success');
+  } catch (err) {
+    setApiError(
+      err instanceof Error
+        ? err.message
+        : 'FD opening failed'
+    );
+    throw err;
+  }
+};
+
+
   const validate = (): boolean => {
     const e: FDErrors = {};
     if (!form.savingAccount) e.savingAccount = 'Please select an account';
@@ -260,7 +419,7 @@ maturityData,
           </div>
         </div>
 
-        <div className="form-group">
+        {/* <div className="form-group">
           <label className="form-label">Interest Rate (% p.a.)</label>
           <input
             className="form-input form-input-readonly"
@@ -274,9 +433,9 @@ maturityData,
               ? 'Fetching applicable rate from bank…'
               : 'Rate is fetched automatically based on deposit type and tenure.'}
           </p>
-        </div>
-
-        {showMaturityPreview && maturityData && interestRate !== null && (
+        </div> */}
+        {/* && interestRate !== null */}
+        {maturityData && (
           <div className="card fd-preview-card">
             <div className="card-title fd-preview-title">
               <span className="card-icon">📊</span>Maturity Preview
@@ -287,11 +446,15 @@ maturityData,
             </div>
             <div className="summary-row">
               <span className="summary-key">Interest Rate</span>
-              <span className="summary-val">{interestRate}% p.a.</span>
+              <span className="summary-val">{maturityData.interestRate}% p.a.</span>
             </div>
             <div className="summary-row">
               <span className="summary-key">Interest Earned</span>
-              <span className="summary-val">₹ {maturityData.interestEarned.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+              <span className="summary-val">
+                ₹ {Number(maturityData.interestAmount).toLocaleString('en-IN', {
+                  maximumFractionDigits: 2,
+                })}
+              </span>
             </div>
             <div className="summary-row">
               <span className="summary-key">Maturity Amount</span>
@@ -359,14 +522,27 @@ maturityData,
             className={errors.nomineeSource ? 'is-error' : ''}
             value={form.nomineeSource}
             placeholder="Select nominee option"
-            options={[
-              { value: 'existing', label: 'Use Debit Account Nominee' },
-              { value: 'new', label: 'Add New Nominee' },
-            ]}
+            options={nomineeOptions}
             onChange={v => set('nomineeSource', v as NomineeSource)}
           />
           {errors.nomineeSource && <p className="form-error">⚠ {errors.nomineeSource}</p>}
         </div>
+        {nomineeLoading && (
+          <p className="form-hint">Fetching nominee details...</p>
+        )}
+
+        {existingNominee && (
+          <div className="info-box" style={{ marginTop: 10 }}>
+            <span className="info-icon">👤</span>
+            <span>
+              Existing Nominee :
+              <strong>
+                {' '}
+                {existingNominee.nomineeName}
+              </strong>
+            </span>
+          </div>
+        )}
 
         {form.nomineeSource === 'new' && (
           <>
@@ -403,11 +579,11 @@ maturityData,
         <div className="summary-row"><span className="summary-key">Debit Account</span><span className="summary-val">{acc?.label}</span></div>
         <div className="summary-row"><span className="summary-key">Deposit Amount</span><span className="summary-val">₹ {Number(form.depositAmount).toLocaleString('en-IN')}</span></div>
         <div className="summary-row"><span className="summary-key">Deposit Type</span><span className="summary-val">{form.depositType}</span></div>
-        <div className="summary-row"><span className="summary-key">Interest Rate</span><span className="summary-val">{interestRate !== null ? `${interestRate}% p.a.` : '—'}</span></div>
+        <div className="summary-row"><span className="summary-key">Interest Rate</span><span className="summary-val">{maturityData.interestRate !== null ? `${maturityData.interestRate}% p.a.` : '—'}</span></div>
         <div className="summary-row"><span className="summary-key">Interest Pay Mode</span><span className="summary-val">{form.interestPayMode}</span></div>
         <div className="summary-row"><span className="summary-key">Period</span><span className="summary-val">{form.depositPeriod} {form.periodType}</span></div>
         {maturityData && <>
-          <div className="summary-row"><span className="summary-key">Interest Earned</span><span className="summary-val">₹ {maturityData.interestEarned.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
+          <div className="summary-row"><span className="summary-key">Interest Earned</span><span className="summary-val">₹ {maturityData.interestAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
           <div className="summary-row"><span className="summary-key">Maturity Amount</span><span className="summary-val">₹ {maturityData.maturityAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
         </>}
         <div className="summary-row"><span className="summary-key">Renewal</span><span className="summary-val">{renewalDisplay}</span></div>
@@ -424,7 +600,7 @@ maturityData,
         <div className="btn-row">
           <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('form')}>← Edit</button>
           <button className="btn btn-primary" style={{ flex: 2 }} disabled={loading}
-            onClick={() => { setLoading(true); setTimeout(() => { setLoading(false); setStep('otp'); }, 900); }}>
+            onClick={sendOtpAndProceed}>
             {loading ? 'Sending OTP…' : 'Confirm & Get OTP →'}
           </button>
         </div>
@@ -438,10 +614,16 @@ maturityData,
       <div className="card otp-screen">
         <div className="card-title" style={{ justifyContent: 'center' }}><span className="card-icon">📱</span>OTP Verification</div>
         <p className="otp-subtitle">Enter the 5-digit OTP sent to your registered mobile number to authorise the FD</p>
-        <OTPInput onComplete={() => {
-          setLoading(true);
-          setTimeout(() => { setLoading(false); setStep('success'); }, 1100);
-        }} />
+        <OTPInput
+                 onComplete={async (otp) => {
+                   setLoading(true);
+                   try {
+                     await handleOtpComplete(otp);
+                   } finally {
+                     setLoading(false);
+                   }
+                 }}
+               />
         {loading && <p style={{ marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>Verifying…</p>}
         <p className="resend-text">Didn't receive OTP? <span className="resend-link">Resend OTP</span></p>
       </div>
