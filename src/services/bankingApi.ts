@@ -1,6 +1,6 @@
 import jsSHA from 'jssha';
 import type { ServiceType, PMSocialSubservice } from '../types';
-import { cachedFetch } from './requestCache';
+import { cachedFetch, cachedFetch1 } from './requestCache';
 import { getInsurancePremiumDetails } from '../utils/pmPremium';
 import { estimateFdInterestRate } from '../utils/fdMaturity';
 
@@ -109,6 +109,7 @@ function assertSuccess(data: BankApiResponse, fallback = 'Request failed'): void
 async function postEndpoint<T extends BankApiResponse>(
   endpoint: string,
   payload: Record<string, unknown>,
+  validate = true,
 ): Promise<T> {
   const response = await fetch(`${API_BASE}/${endpoint}`, {
     method: 'POST',
@@ -117,10 +118,24 @@ async function postEndpoint<T extends BankApiResponse>(
   });
 
   const data = (await response.json()) as T;
+
+  console.log('API DATA:', data);
+
   if (!response.ok) {
     throw new Error(data.errorMsg || data.message || `Request failed: ${endpoint}`);
   }
-  assertSuccess(data);
+
+  try {
+
+    if (validate) {
+    assertSuccess(data);
+  }
+
+  } catch (e) {
+    console.error('assertSuccess failed:', e);
+    throw e;
+  }
+
   return data;
 }
 
@@ -178,7 +193,7 @@ export async function fetchAccounts(customerId: string): Promise<AccountOption[]
     const fullAccountNumber = String(item.fullAccountNumber ?? accountno);
     const branchName = String(item.branchName ?? '');
     return {
-      label: maskAccount(accountno,branchName),
+      label: maskAccount(accountno, branchName),
       value: fullAccountNumber,
       fullAccountNumber,
       balance: Number(item.accountBal ?? 0),
@@ -287,7 +302,7 @@ export async function fetchInsurancePremium(
   try {
     const timeStamp = generateTimestamp();
     const checkSum = generateChecksum(
-      SECRET_KEY, VENDOR, 'getpreinsamount', USERNAME, PASSWORD,scheme
+      SECRET_KEY, VENDOR, 'getpreinsamount', USERNAME, PASSWORD, scheme
     );
 
     const data = await postEndpoint<BankApiResponse & { insurancePremiumAmount?: string }>(
@@ -655,39 +670,60 @@ export async function fetchCalculateMaturity(
   months: number,
   days: number,
 ) {
+
+  console.log('fetchCalculateMaturity called');
   const timeStamp = generateTimestamp();
 
-  console.log('Calculating Maturity with:', {
+  const checksumParams = [
+    String(depositAmount + ".0"),
+    schemeCode,
+    String(months)
+  ];
+
+
+
+  if (days > 0) {
+    checksumParams.push(String(days));
+  }
+
+
+
+  const checkSum = generateChecksum(
+    SECRET_KEY,
+    VENDOR,
+    'calculateMaturity_MB',
+    USERNAME,
+    PASSWORD,
+    ...checksumParams,
+  );
+  // console.log('Generated Checksum:', checkSum);
+  console.log('Sending payload:', {
     depositAmount,
     schemeCode,
     months,
     days,
   });
- const checksumParams = [
-  String(depositAmount),
-  schemeCode,
-  String(months)
-];
-
-
-
-if (days > 0) {
-  checksumParams.push(String(days));
-}
-
-console.log('Checksum Parameters:', checksumParams);
-
-const checkSum = generateChecksum(
-  SECRET_KEY,
-  VENDOR,
-  'calculateMaturity_MB',
-  USERNAME,
-  PASSWORD,
-  ...checksumParams,
-);
-  console.log('Generated Checksum:', checkSum);
-
-  return postEndpoint(
+  const response =
+  //  await fetch(
+  //   `/dmCmsService/rest/endpoints/calculateMaturity_MB`,
+  //   {
+  //     method: 'POST',
+  //     headers: { 'Content-Type': 'application/json' },
+  //     body: JSON.stringify({
+  //      ...basePayload('calculateMaturity_MB', checkSum),
+  //     timeStamp,
+  //     depositAmount,
+  //     schemeCode,
+  //     months,
+  //     days,
+  //     }),
+  //   }
+  // );
+  
+  
+  
+  
+  await postEndpoint(
     'calculateMaturity_MB',
     {
       ...basePayload('calculateMaturity_MB', checkSum),
@@ -697,7 +733,13 @@ const checkSum = generateChecksum(
       months,
       days,
     },
+    false 
   );
+
+  console.log('API Raw Response:', response);
+
+
+  return response;
 }
 
 
@@ -707,7 +749,9 @@ export function calculateMaturity(
   months: number,
   days: number,
 ) {
-  return cachedFetch(
+  console.log('calculateMaturity called');
+  return cachedFetch1(
+
     `maturity:${depositAmount}:${schemeCode}:${months}:${days}`,
     () => fetchCalculateMaturity(
       depositAmount,
@@ -717,4 +761,57 @@ export function calculateMaturity(
     ),
     5 * 60 * 1000,
   );
+}
+
+
+export async function openFDAccount(input: {
+  customerCode: string;
+  depositAmount: string;
+  months: number;
+  days: number;
+  debitAccountNumber: string;
+  repayAccountNumber: string;
+  closeonMaturity: 'Y' | 'N';
+  autoRenewal: 'Y' | 'N';
+  depositType: string;
+  interestPayMode: string;
+  nomineeRequired: 'Y' | 'N';
+  nomineeAsdebitAccount: 'Y' | 'N';
+  nomineeisMinor: 'Y' | 'N';
+}) {
+  const timeStamp = generateTimestamp();
+
+  const checkSum = generateChecksum(
+    SECRET_KEY,
+    VENDOR,
+    'tdAccountOpening_WB',
+    USERNAME,
+    PASSWORD,
+    input.customerCode
+  );
+
+  return postEndpoint('tdAccountOpening_WB', {
+    ...basePayload('tdAccountOpening_WB', checkSum),
+    timeStamp,
+
+    customerCode: input.customerCode,
+    depositAmount: input.depositAmount,
+    schemeCode: '0',
+
+    months: input.months,
+    days: input.days,
+
+    debitAccountNumber: input.debitAccountNumber,
+    repayAccountNumber: input.repayAccountNumber,
+
+    closeonMaturity: input.closeonMaturity,
+    autoRenewal: input.autoRenewal,
+
+    depositType: input.depositType,
+    interestPayMode: input.interestPayMode,
+
+    nomineeRequired: input.nomineeRequired,
+    nomineeAsdebitAccount: input.nomineeAsdebitAccount,
+    nomineeisMinor: input.nomineeisMinor,
+  });
 }
