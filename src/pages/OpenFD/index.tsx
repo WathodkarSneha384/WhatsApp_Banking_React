@@ -22,7 +22,7 @@ import { useOtpCountdown } from '../../hooks/useOtpCountdown';
 import { formatDDMMYYYY } from '../../utils/date';
 import { openFDAccount, sendOtp, validateOtp, verifyExistingNominees } from '../../services/bankingApi';
 
-type NomineeSource = 'existing' | 'new'  | 'no';
+type NomineeSource = 'existing' | 'new' | 'no';
 type Step = 'form' | 'confirm' | 'otp' | 'success';
 const STEP_NUM: Record<Step, number> = { form: 1, confirm: 2, otp: 3, success: 4 };
 
@@ -161,7 +161,7 @@ export default function OpenFD() {
       value: 'new',
       label: 'Add New Nominee',
     });
-     options.push({
+    options.push({
       value: 'no',
       label: 'Nominee Not Required',
     });
@@ -222,7 +222,7 @@ export default function OpenFD() {
     setNomineeErrors(e => ({ ...e, [k]: '' }));
   };
 
- const sendOtpAndProceed = async () => {
+  const sendOtpAndProceed = async () => {
     setLoading(true);
     setApiError('');
     try {
@@ -235,70 +235,70 @@ export default function OpenFD() {
     }
   };
   const handleOtpComplete = async (otp: string) => {
-  setApiError('');
+    setApiError('');
 
-  try {
-    // 1. Verify OTP
-    await validateOtp(
-      customer.mobileNo,
-      otp,
-      'TDACCOUNTOPEN'
-    );
+    try {
+      // 1. Verify OTP
+      await validateOtp(
+        customer.mobileNo,
+        otp,
+        'TDACCOUNTOPEN'
+      );
 
-    // 2. Open FD after OTP success
-    const response = await openFDAccount({
-      customerCode: customer.customerId,
-      depositAmount: form.depositAmount,
+      // 2. Open FD after OTP success
+      const response = await openFDAccount({
+        customerCode: customer.customerId,
+        depositAmount: form.depositAmount,
 
-      months:
-        form.periodType === 'Months'
-          ? Number(form.depositPeriod)
-          : 0,
+        months:
+          form.periodType === 'Months'
+            ? Number(form.depositPeriod)
+            : 0,
 
-      days:
-        form.periodType === 'Days'
-          ? Number(form.depositPeriod)
-          : 0,
+        days:
+          form.periodType === 'Days'
+            ? Number(form.depositPeriod)
+            : 0,
 
-      debitAccountNumber: form.savingAccount,
-      repayAccountNumber: form.savingAccount,
+        debitAccountNumber: form.savingAccount,
+        repayAccountNumber: form.savingAccount,
 
-      closeonMaturity: 'Y',
-      autoRenewal: toAutoRenewalFlag(form.renewalRequired as RenewalRequired),
-      renewalType: toRenewalApiCode(form.renewalRequired as RenewalRequired),
+        closeonMaturity: 'Y',
+        autoRenewal: toAutoRenewalFlag(form.renewalRequired as RenewalRequired),
+        renewalType: toRenewalApiCode(form.renewalRequired as RenewalRequired),
 
-      depositType:
-        form.depositType === 'Simple'
-          ? 'S'
-          : 'C',
+        depositType:
+          form.depositType === 'Simple'
+            ? 'S'
+            : 'C',
 
-      interestPayMode: toInterestPayModeApiCode(form.interestPayMode),
+        interestPayMode: toInterestPayModeApiCode(form.interestPayMode),
 
-      nomineeRequired: 'Y',
+        nomineeRequired: form.nomineeSource === 'no' ? 'N' : 'Y',
 
-      nomineeAsdebitAccount:
-        form.nomineeSource === 'existing'
-          ? 'Y'
-          : 'N',
+        nomineeAsdebitAccount:
+          form.nomineeSource === 'existing'
+            ? 'Y'
+            : 'N',
 
-      nomineeisMinor: 'N',
-    });
+        nomineeisMinor: 'N',
+      });
 
-    console.log('FD Open Response', response);
+      console.log('FD Open Response', response);
 
-    // Optional:
-    // setFdAccNo(response.fdAccountNo);
+      // Optional:
+      // setFdAccNo(response.fdAccountNo);
 
-    setStep('success');
-  } catch (err) {
-    setApiError(
-      err instanceof Error
-        ? err.message
-        : 'FD opening failed'
-    );
-    throw err;
-  }
-};
+      setStep('success');
+    } catch (err) {
+      setApiError(
+        err instanceof Error
+          ? err.message
+          : 'FD opening failed'
+      );
+      throw err;
+    }
+  };
 
 
   const validate = (): boolean => {
@@ -591,7 +591,7 @@ export default function OpenFD() {
           <p className="form-hint">Fetching nominee details...</p>
         )}
 
-        {existingNominee && (
+        {form.nomineeSource === 'existing' && existingNominee && (
           <div className="info-box" style={{ marginTop: 10 }}>
             <span className="info-icon">👤</span>
             <span>
@@ -655,7 +655,11 @@ export default function OpenFD() {
         </>}
         <div className="summary-row"><span className="summary-key">Interest Rate</span><span className="summary-val">{maturityData?.interestRate != null ? `${maturityData.interestRate}% p.a.` : '—'}</span></div>
         <div className="divider" />
-        <div className="summary-row"><span className="summary-key">Nominee</span><span className="summary-val">{form.nomineeSource === 'existing' ? 'Account Nominee' : 'New Nominee'}</span></div>
+        <div className="summary-row"><span className="summary-key">Nominee</span><span className="summary-val">{form.nomineeSource === 'existing'
+          ? 'Account Nominee'
+          : form.nomineeSource === 'new'
+            ? 'New Nominee'
+            : 'Nominee Not Required'}</span></div>
         {form.nomineeSource === 'new' && <>
           <div className="summary-row"><span className="summary-key">Nominee Name</span><span className="summary-val">{nominee.nomineeName}</span></div>
           <div className="summary-row"><span className="summary-key">Nominee DOB</span><span className="summary-val">{new Date(nominee.nomineeDob).toLocaleDateString('en-IN')}</span></div>
