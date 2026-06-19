@@ -166,6 +166,17 @@ export default function PPS() {
     setErrors(e);
     return Object.keys(e).length === 0;
   };
+  const minIssueDate = () => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - 3);
+    return toInputDate(date);
+  };
+
+  const maxIssueDate = () => {
+    const date = new Date();
+    date.setMonth(date.getMonth() + 3);
+    return toInputDate(date);
+  };
 
   const restart = (m?: Mode) => {
     setMode(m ?? null);
@@ -395,7 +406,7 @@ export default function PPS() {
                 className={`fi ${errors.issueDate ? 'is-error' : ''}`}
                 type="date"
                 min={minIssueDate()}
-                max={toInputDate(new Date())}
+                max={maxIssueDate()}
                 value={form.issueDate}
                 onChange={e => setField('issueDate', e.target.value)}
               />
