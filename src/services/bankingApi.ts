@@ -769,7 +769,8 @@ export async function openFDAccount(input: {
     'tdAccountOpening_WB',
     USERNAME,
     PASSWORD,
-    input.customerCode
+    input.debitAccountNumber,
+    input.repayAccountNumber
   );
 
   return postEndpoint('tdAccountOpening_WB', {

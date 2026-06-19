@@ -22,7 +22,7 @@ import { useOtpCountdown } from '../../hooks/useOtpCountdown';
 import { formatDDMMYYYY } from '../../utils/date';
 import { openFDAccount, sendOtp, validateOtp, verifyExistingNominees } from '../../services/bankingApi';
 
-type NomineeSource = 'existing' | 'new';
+type NomineeSource = 'existing' | 'new'  | 'no';
 type Step = 'form' | 'confirm' | 'otp' | 'success';
 const STEP_NUM: Record<Step, number> = { form: 1, confirm: 2, otp: 3, success: 4 };
 
@@ -153,13 +153,17 @@ export default function OpenFD() {
       options.push({
         value: 'existing',
         label: existingNominee.nomineeName
-          ? `Use Account Nominee — ${existingNominee.nomineeName}`
-          : 'Use Debit Account Nominee',
+          ? 'Debit Account Nominee'
+          : 'Debit Account Nominee',
       });
     }
     options.push({
       value: 'new',
       label: 'Add New Nominee',
+    });
+     options.push({
+      value: 'no',
+      label: 'Nominee Not Required',
     });
     return options;
   }, [existingNominee]);
