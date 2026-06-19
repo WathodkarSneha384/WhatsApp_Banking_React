@@ -488,10 +488,6 @@ export async function createPPSChequeEntry(input: {
     PASSWORD,
     accountNo,
     chequeNo,
-    // issueDate,
-    // chequeAmount,
-    // payeeName,
-    // CHANNEL,
   );
 
   const data = await postEndpoint<BankApiResponse & { resStatus?: string }>(
