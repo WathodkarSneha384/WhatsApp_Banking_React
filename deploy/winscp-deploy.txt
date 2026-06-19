@@ -1,0 +1,29 @@
+# WinSCP deployment script for UAT (10.2.0.30)
+# Usage in WinSCP: Commands > Open Terminal / Script > Run script
+# Or: winscp.com /script=deploy\winscp-deploy.txt
+
+option batch abort
+option confirm off
+
+open sftp://root@10.2.0.30/
+
+# Ensure target folders exist
+call mkdir -p /usr/local/WhatsApp_Banking_React/dist
+call mkdir -p /usr/local/WhatsApp_Banking_React/deploy
+
+# Upload production build
+lcd "C:\Users\Sneha\Downloads\WhatsAppBanking\WhatsApp_Banking_React\dist"
+cd /usr/local/WhatsApp_Banking_React/dist
+put -delete *
+
+# Upload nginx config + setup script
+lcd "C:\Users\Sneha\Downloads\WhatsAppBanking\WhatsApp_Banking_React\deploy"
+cd /usr/local/WhatsApp_Banking_React/deploy
+put nginx-whatsapp-banking.conf
+put setup-server.sh
+
+# Configure and start nginx
+call chmod +x /usr/local/WhatsApp_Banking_React/deploy/setup-server.sh
+call bash /usr/local/WhatsApp_Banking_React/deploy/setup-server.sh
+
+exit

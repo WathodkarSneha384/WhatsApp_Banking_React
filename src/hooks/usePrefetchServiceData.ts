@@ -4,7 +4,6 @@ import {
   prefetchAccounts,
   prefetchPPSParameters,
   prefetchInsurancePremium,
-  DEV_CUSTOMER_ID,
 } from '../services/api';
 
 export function usePrefetchServiceData(
@@ -26,11 +25,4 @@ export function usePrefetchServiceData(
       prefetchInsurancePremium(subservice);
     }
   }, [active, service, subservice, customerId]);
-}
-
-export function resolveCustomerId(
-  tokenCustomerId: string | null | undefined,
-  searchCustomerId: string | null,
-): string {
-  return tokenCustomerId || searchCustomerId || DEV_CUSTOMER_ID;
 }

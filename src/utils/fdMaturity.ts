@@ -21,14 +21,6 @@ export function periodToYears(period: number, periodType: 'Days' | 'Months'): nu
   return period / 12;
 }
 
-export function defaultRenewalType(
-  interestPayMode: string,
-): 'Renew With Interest' | 'Renew Without Interest' {
-  if (interestPayMode === 'On Maturity') return 'Renew With Interest';
-  if (PERIODIC_PAY_MODES.includes(interestPayMode)) return 'Renew Without Interest';
-  return 'Renew Without Interest';
-}
-
 export function calculateFdMaturity(input: {
   principal: number;
   rate: number;

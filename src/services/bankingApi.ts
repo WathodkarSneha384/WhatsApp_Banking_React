@@ -1,19 +1,11 @@
 import jsSHA from 'jssha';
 import type { ServiceType, PMSocialSubservice } from '../types';
+import { apiConfig } from '../config/apiConfig';
 import { cachedFetch, cachedFetch1 } from './requestCache';
 import { getInsurancePremiumDetails } from '../utils/pmPremium';
 import { estimateFdInterestRate } from '../utils/fdMaturity';
 
-const BANK = '068';
-const API_BASE = '/dmCmsService/rest/endpoints';
-const SECRET_KEY = '35fc015d9308f316bd524c824cce9cd56ea7e455c6fe5b37bf';
-const VENDOR = 'MOBILE';
-const USERNAME = 'MOBILE';
-const PASSWORD = "95700e3a92830ae20ce0bddb23a2c1178f96017d70362572be90e293598c6126";
-const CHANNEL = 'WB';
-
-export const DEV_CUSTOMER_ID = '0000992099005742';
-export const DEV_MOBILE_NO = '9908360790';
+const { apiBase: API_BASE, bank: BANK, secretKey: SECRET_KEY, vendor: VENDOR, username: USERNAME, password: PASSWORD, channel: CHANNEL } = apiConfig;
 
 export interface TokenValidationResponse {
   service: ServiceType;
@@ -111,7 +103,13 @@ async function postEndpoint<T extends BankApiResponse>(
   payload: Record<string, unknown>,
   validate = true,
 ): Promise<T> {
-  const response = await fetch(`${API_BASE}/${endpoint}`, {
+  const url = `${API_BASE}/${endpoint}`;
+
+  if (import.meta.env.DEV) {
+    console.debug('[API]', url);
+  }
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -162,7 +160,7 @@ export async function validateMobileNo(mobileNumber: string): Promise<CustomerPr
   );
 
   return {
-    customerId: data.cif || DEV_CUSTOMER_ID,
+    customerId: data.cif || '',
     customerName: data.customerName || '',
     mobileNo: mobileNumber,
     dateOfBirth: data.dateOfBirth,
@@ -201,7 +199,8 @@ export async function fetchAccounts(customerId: string): Promise<AccountOption[]
   });
 }
 
-export function getAccounts(customerId = DEV_CUSTOMER_ID): Promise<AccountOption[]> {
+export function getAccounts(customerId: string): Promise<AccountOption[]> {
+  if (!customerId) return Promise.resolve([]);
   return cachedFetch(`accounts:${customerId}`, () => fetchAccounts(customerId));
 }
 
@@ -406,8 +405,7 @@ export function getFdInterestRate(input: {
 export async function sendOtp(mobileNo: string, otpRequiredFor: 'TDACCOUNTOPEN'): Promise<void> {
   const timeStamp = generateTimestamp();
   const checkSum = generateChecksum(
-    SECRET_KEY, VENDOR, 'sendotp', USERNAME, PASSWORD, '9908360790', BANK
-
+    SECRET_KEY, VENDOR, 'sendotp', USERNAME, PASSWORD, mobileNo, BANK,
   );
 
   await postEndpoint(
@@ -773,6 +771,7 @@ export async function openFDAccount(input: {
   repayAccountNumber: string;
   closeonMaturity: 'Y' | 'N';
   autoRenewal: 'Y' | 'N';
+  renewalType: 'I' | 'W' | 'N';
   depositType: string;
   interestPayMode: string;
   nomineeRequired: 'Y' | 'N';
@@ -806,6 +805,7 @@ export async function openFDAccount(input: {
 
     closeonMaturity: input.closeonMaturity,
     autoRenewal: input.autoRenewal,
+    renewalType: input.renewalType,
 
     depositType: input.depositType,
     interestPayMode: input.interestPayMode,

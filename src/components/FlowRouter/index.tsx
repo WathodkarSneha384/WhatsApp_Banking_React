@@ -93,7 +93,13 @@ export default function FlowRouter() {
 
   if (status === 'home') {
     return (
-      <FlowProvider>
+      <FlowProvider
+        customer={{
+          customerId: customerId ?? '',
+          mobileNo: mobileNo ?? '',
+          customerName: customerName ?? '',
+        }}
+      >
         <Home />
       </FlowProvider>
     );

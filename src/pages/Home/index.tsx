@@ -2,6 +2,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import ServiceShell from '../../components/ServiceShell';
 import type { ServiceType } from '../../types';
 import { clearSessionTimer } from '../../hooks/useSessionTimeout';
+import { buildServicePath, hasRequiredLinkParams } from '../../utils/linkParams';
+import { useFlow } from '../../context/FlowContext';
 
 const SERVICES: { id: ServiceType; icon: string; title: string; desc: string; subservice?: string }[] = [
   {
@@ -48,9 +50,12 @@ const SERVICES: { id: ServiceType; icon: string; title: string; desc: string; su
 export default function Home() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { customer } = useFlow();
   const sessionExpired = searchParams.get('session') === 'expired';
+  const hasCustomerLink = hasRequiredLinkParams(searchParams);
 
   const openService = (path: string) => {
+    if (!hasCustomerLink) return;
     clearSessionTimer();
     navigate(path);
   };
@@ -67,17 +72,26 @@ export default function Home() {
           <span>Your session has expired after 30 minutes. Please select a service again to continue.</span>
         </div>
       )}
+      {hasCustomerLink && (
+        <div className="info-box" style={{ marginBottom: 16 }}>
+          <span className="info-icon">👤</span>
+          <span>
+            Customer <strong>{customer.customerName || '—'}</strong>
+            {' · '}
+            ID <strong>{customer.customerId}</strong>
+            {' · '}
+            Mobile <strong>{customer.mobileNo}</strong>
+          </span>
+        </div>
+      )}
       <div className="home-grid">
         {SERVICES.map(s => (
           <button
             key={`${s.id}-${s.subservice ?? 'main'}`}
             type="button"
             className="home-card"
-            onClick={() => openService(
-              s.subservice
-                ? `/?service=${s.id}&subservice=${s.subservice}`
-                : `/?service=${s.id}`,
-            )}
+            disabled={!hasCustomerLink}
+            onClick={() => openService(buildServicePath(s.id, searchParams, s.subservice))}
           >
             <span className="home-card-icon">{s.icon}</span>
             <span className="home-card-body">

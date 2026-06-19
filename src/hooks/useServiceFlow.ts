@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { PMSocialSubservice, ServiceType } from '../types';
-import { validateToken, DEV_CUSTOMER_ID, DEV_MOBILE_NO } from '../services/api';
+import { validateToken, validateMobileNo } from '../services/api';
+import { getDevCustomerFallback } from '../config/apiConfig';
+import {
+  extractCustomerFromUrl,
+  type CustomerLinkSession,
+} from '../utils/linkParams';
 
 type FlowStatus = 'loading' | 'ready' | 'error' | 'home';
 
@@ -17,6 +22,9 @@ interface UseServiceFlowResult {
 
 const VALID_SERVICES: ServiceType[] = ['pps', 'nominee', 'pmsocial', 'openfd'];
 const PM_SOCIAL_SUBSERVICES: PMSocialSubservice[] = ['PMJJBY', 'PMSBY', 'PMAPY'];
+
+const MISSING_LINK_ERROR =
+  'This link is missing customer details. Please use the WhatsApp link sent by your bank.';
 
 function isValidService(value: string): value is ServiceType {
   return VALID_SERVICES.includes(value as ServiceType);
@@ -35,6 +43,27 @@ function resolveSubservice(
   return subserviceParam.toUpperCase() as PMSocialSubservice;
 }
 
+function resolveCustomerSession(
+  urlSession: CustomerLinkSession | null,
+  overrides?: Partial<CustomerLinkSession>,
+): CustomerLinkSession | null {
+  const devFallback = import.meta.env.DEV ? getDevCustomerFallback() : null;
+
+  const customerId = overrides?.customerId || urlSession?.customerId || devFallback?.customerId;
+  const mobileNo = overrides?.mobileNo || urlSession?.mobileNo || devFallback?.mobileNo;
+
+  if (!customerId || !mobileNo) return null;
+
+  return {
+    customerId,
+    mobileNo,
+    customerName:
+      overrides?.customerName ??
+      urlSession?.customerName ??
+      null,
+  };
+}
+
 export function useServiceFlow(): UseServiceFlowResult {
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<FlowStatus>('loading');
@@ -46,16 +75,39 @@ export function useServiceFlow(): UseServiceFlowResult {
   const [customerName, setCustomerName] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     const serviceParam = searchParams.get('service');
     const subserviceParam = searchParams.get('subservice');
     const tokenParam = searchParams.get('token');
-    const urlCustomerId = searchParams.get('customerId');
-    const urlMobile = searchParams.get('mobile');
+    const urlSession = extractCustomerFromUrl(searchParams);
 
-    const applyCustomer = (id?: string, mobile?: string, name?: string) => {
-      setCustomerId(id || urlCustomerId || DEV_CUSTOMER_ID);
-      setMobileNo(mobile || urlMobile || DEV_MOBILE_NO);
-      setCustomerName(name || searchParams.get('customerName') || 'Customer');
+    const applySession = (session: CustomerLinkSession | null): boolean => {
+      if (!session) {
+        setError(MISSING_LINK_ERROR);
+        setStatus('error');
+        return false;
+      }
+
+      setCustomerId(session.customerId);
+      setMobileNo(session.mobileNo);
+      setCustomerName(session.customerName ?? 'Customer');
+      return true;
+    };
+
+    const enrichCustomerName = async (session: CustomerLinkSession) => {
+      if (session.customerName) return;
+
+      try {
+        const profile = await validateMobileNo(session.mobileNo);
+        if (cancelled) return;
+
+        if (profile.customerName) {
+          setCustomerName(profile.customerName);
+        }
+      } catch {
+        // Keep URL-provided customerId/mobile even if profile lookup fails.
+      }
     };
 
     const finishReady = (resolvedService: ServiceType, resolvedSubservice: PMSocialSubservice | null) => {
@@ -69,43 +121,76 @@ export function useServiceFlow(): UseServiceFlowResult {
       setStatus('ready');
     };
 
-    if (tokenParam) {
-      validateToken(tokenParam)
-        .then((data) => {
-          applyCustomer(data.customerId, data.mobileNo, data.customerName);
+    const run = async () => {
+      if (tokenParam) {
+        try {
+          const data = await validateToken(tokenParam);
+          if (cancelled) return;
+
+          const session = resolveCustomerSession(urlSession, {
+            customerId: data.customerId,
+            mobileNo: data.mobileNo,
+            customerName: data.customerName,
+          });
+
+          if (!applySession(session)) return;
+
+          await enrichCustomerName(session!);
+          if (cancelled) return;
+
           finishReady(data.service, resolveSubservice(data.service, subserviceParam));
-        })
-        .catch(() => {
-          setError('Invalid or expired link. Please request a new link from your bank.');
-          setStatus('error');
-        });
-      return;
-    }
+        } catch {
+          if (!cancelled) {
+            setError('Invalid or expired link. Please request a new link from your bank.');
+            setStatus('error');
+          }
+        }
+        return;
+      }
 
-    if (!serviceParam) {
-      setService(null);
-      setSubservice(null);
-      setCustomerId(null);
-      setMobileNo(null);
-      setCustomerName(null);
-      setStatus('home');
-      return;
-    }
+      if (!serviceParam) {
+        const session = resolveCustomerSession(urlSession);
+        if (!session) {
+          applySession(null);
+          return;
+        }
 
-    applyCustomer();
-    const normalized = serviceParam.toLowerCase();
+        setService(null);
+        setSubservice(null);
+        setCustomerId(session.customerId);
+        setMobileNo(session.mobileNo);
+        setCustomerName(session.customerName ?? 'Customer');
+        setStatus('home');
 
-    if (isValidSubservice(normalized)) {
-      finishReady('pmsocial', normalized.toUpperCase() as PMSocialSubservice);
-      return;
-    }
+        void enrichCustomerName(session);
+        return;
+      }
 
-    if (isValidService(normalized)) {
-      finishReady(normalized, resolveSubservice(normalized, subserviceParam));
-    } else {
-      setError(`Unknown service "${serviceParam}". Please use a valid banking service link.`);
-      setStatus('error');
-    }
+      const session = resolveCustomerSession(urlSession);
+      if (!applySession(session)) return;
+
+      void enrichCustomerName(session!);
+
+      const normalized = serviceParam.toLowerCase();
+
+      if (isValidSubservice(normalized)) {
+        finishReady('pmsocial', normalized.toUpperCase() as PMSocialSubservice);
+        return;
+      }
+
+      if (isValidService(normalized)) {
+        finishReady(normalized, resolveSubservice(normalized, subserviceParam));
+      } else {
+        setError(`Unknown service "${serviceParam}". Please use a valid banking service link.`);
+        setStatus('error');
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams]);
 
   return { service, subservice, status, error, customerId, mobileNo, customerName };
