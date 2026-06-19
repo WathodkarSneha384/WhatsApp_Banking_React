@@ -24,6 +24,7 @@ interface Props {
   showName?: boolean;
   showGuardianDob?: boolean;
   relationType?: 'relation' | 'pmyrelation';
+  fieldIdPrefix?: string;
 }
 
 function isMinor(dob: string): boolean {
@@ -69,7 +70,8 @@ export default function NomineeFields({
   onChange,
   showName = true,
   showGuardianDob = true,
- relationType = 'relation',
+  relationType = 'relation',
+  fieldIdPrefix = 'nominee',
 }: Props) {
   const { relations: relationOptions } = useRelations(relationType);
 
@@ -82,6 +84,7 @@ export default function NomineeFields({
         <div className="form-group">
           <label className="form-label">Nominee Name <span className="required">*</span></label>
           <input
+            id={`${fieldIdPrefix}-nomineeName`}
             className={`form-input ${errors.nomineeName ? 'is-error' : ''}`}
             placeholder="Full name as per records"
             value={values.nomineeName}
@@ -94,6 +97,7 @@ export default function NomineeFields({
       <div className="form-group">
         <label className="form-label">Nominee Date of Birth <span className="required">*</span></label>
         <input
+          id={`${fieldIdPrefix}-nomineeDob`}
           className={`form-input ${errors.nomineeDob ? 'is-error' : ''}`}
           type="date"
           max={today}
@@ -114,6 +118,7 @@ export default function NomineeFields({
       <div className="form-group">
         <label className="form-label">Relationship <span className="required">*</span></label>
         <Select
+          id={`${fieldIdPrefix}-relation`}
           className={errors.relation ? 'is-error' : ''}
           value={values.relation}
           placeholder="Select relationship"
@@ -130,6 +135,7 @@ export default function NomineeFields({
           <div className="form-group">
             <label className="form-label">Guardian Name <span className="required">*</span></label>
             <input
+              id={`${fieldIdPrefix}-guardianName`}
               className={`form-input ${errors.guardianName ? 'is-error' : ''}`}
               placeholder="Full name of guardian"
               value={values.guardianName}
@@ -142,6 +148,7 @@ export default function NomineeFields({
             <div className="form-group">
               <label className="form-label">Guardian Date of Birth (DD-MM-YYYY) <span className="required">*</span></label>
               <input
+                id={`${fieldIdPrefix}-guardianDob`}
                 className={`form-input ${errors.guardianDob ? 'is-error' : ''}`}
                 type="date"
                 max={today}
@@ -160,6 +167,7 @@ export default function NomineeFields({
           <div className="form-group">
             <label className="form-label">Guardian Relation with Minor <span className="required">*</span></label>
             <Select
+              id={`${fieldIdPrefix}-guardianRelation`}
               className={errors.guardianRelation ? 'is-error' : ''}
               value={values.guardianRelation}
               placeholder="Select relation"

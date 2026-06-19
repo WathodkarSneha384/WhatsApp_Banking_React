@@ -29,6 +29,9 @@ export function getInterestPayModeOptions(
   if (!depositType || !renewalRequired) return [];
 
   if (depositType === 'Compound') {
+    if (renewalRequired === 'With Interest') {
+      return ['Reinvest On Maturity'];
+    }
     return ['On Maturity'];
   }
 

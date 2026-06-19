@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import OTPInput from '../../components/OTPInput';
 import Select from '../../components/Select';
 import { Actions } from '../../components/ServiceShell';
@@ -6,7 +6,6 @@ import NomineeFields, { type NomineeFieldValues, type NomineeFieldErrors, valida
 import { useFlow } from '../../context/FlowContext';
 import { useRedirectHome } from '../../hooks/useRedirectHome';
 import { useAccounts } from '../../hooks/useAccounts';
-import { useFdInterestRate } from '../../hooks/useFdInterestRate';
 import {
   getInterestPayModeOptions,
   isInterestPayModeReadonly,
@@ -19,6 +18,8 @@ import {
   type RenewalRequired,
 } from '../../utils/fdRenewalRules';
 import { useCalculateMaturity } from '../../hooks/useCalculateMaturity';
+import { useOtpCountdown } from '../../hooks/useOtpCountdown';
+import { formatDDMMYYYY } from '../../utils/date';
 import { openFDAccount, sendOtp, validateOtp, verifyExistingNominees } from '../../services/bankingApi';
 
 type NomineeSource = 'existing' | 'new';
@@ -37,6 +38,45 @@ interface FDForm {
 }
 
 type FDErrors = Partial<Record<keyof FDForm, string>>;
+
+const FD_FIELD_ORDER: (keyof FDForm)[] = [
+  'savingAccount',
+  'depositAmount',
+  'depositType',
+  'renewalRequired',
+  'interestPayMode',
+  'periodType',
+  'depositPeriod',
+  'nomineeSource',
+];
+
+const NOMINEE_FIELD_ORDER: (keyof NomineeFieldErrors)[] = [
+  'nomineeName',
+  'nomineeDob',
+  'relation',
+  'guardianName',
+  'guardianDob',
+  'guardianRelation',
+];
+
+function fdFieldId(field: keyof FDForm | keyof NomineeFieldErrors): string {
+  if (field === 'periodType') return 'fd-periodType-days';
+  if (NOMINEE_FIELD_ORDER.includes(field as keyof NomineeFieldErrors)) {
+    return `fd-${field}`;
+  }
+  return `fd-${field}`;
+}
+
+function focusFormField(fieldId: string) {
+  requestAnimationFrame(() => {
+    const el = document.getElementById(fieldId);
+    if (!el) return;
+    if (el instanceof HTMLInputElement || el instanceof HTMLButtonElement || el instanceof HTMLSelectElement) {
+      el.focus({ preventScroll: false });
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+}
 
 const EMPTY_NOMINEE: NomineeFieldValues = {
   nomineeName: '', nomineeDob: '', relation: '',
@@ -63,14 +103,21 @@ export default function OpenFD() {
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
   const [existingNominee, setExistingNominee] = useState<any>(null);
   const [nomineeLoading, setNomineeLoading] = useState(false);
-   const [apiError, setApiError] = useState('');
+  const [apiError, setApiError] = useState('');
+  const otpCountdown = useOtpCountdown(step === 'otp');
 
   const {
-    interestRate,
-    loading: interestRateLoading,
-    error: interestRateError,
-  } = useFdInterestRate(form.depositType, form.periodType, form.depositPeriod);
-
+    maturityData,
+    loading: maturityLoading,
+  } = useCalculateMaturity(
+    form.depositAmount,
+    '02',
+    form.periodType === 'Months' ? form.depositPeriod : '0',
+    form.periodType === 'Days' ? form.depositPeriod : '0',
+    form.periodType as 'Days' | 'Months' | '',
+    form.depositType as 'Simple' | 'Compound' | '',
+    form.interestPayMode,
+  );
   const fetchExistingNominee = async (accountNumber: string) => {
     if (!accountNumber) {
       setExistingNominee(null);
@@ -83,8 +130,6 @@ export default function OpenFD() {
       const response = await verifyExistingNominees({
         accountNumber,
       });
-
-      console.log('Nominee Response:', response);
 
       if (
         response?.status === '00' ||
@@ -101,29 +146,32 @@ export default function OpenFD() {
       setNomineeLoading(false);
     }
   };
-  const nomineeOptions = [];
 
-  if (existingNominee) {
-    nomineeOptions.push({
-      value: 'existing',
-      label: 'Use Debit Account Nominee',
+  const nomineeOptions = useMemo(() => {
+    const options: { value: NomineeSource; label: string }[] = [];
+    if (existingNominee) {
+      options.push({
+        value: 'existing',
+        label: existingNominee.nomineeName
+          ? `Use Account Nominee — ${existingNominee.nomineeName}`
+          : 'Use Debit Account Nominee',
+      });
+    }
+    options.push({
+      value: 'new',
+      label: 'Add New Nominee',
     });
-  }
-
-  nomineeOptions.push({
-    value: 'new',
-    label: 'Add New Nominee',
-  });
-
+    return options;
+  }, [existingNominee]);
 
   useEffect(() => {
-  if (!existingNominee && form.nomineeSource === 'existing') {
-    setForm(prev => ({
-      ...prev,
-      nomineeSource: '',
-    }));
-  }
-}, [existingNominee]);
+    if (!existingNominee && form.nomineeSource === 'existing') {
+      setForm(prev => ({
+        ...prev,
+        nomineeSource: '',
+      }));
+    }
+  }, [existingNominee, form.nomineeSource]);
 
   useEffect(() => {
     if (form.savingAccount) {
@@ -132,21 +180,6 @@ export default function OpenFD() {
       setExistingNominee(null);
     }
   }, [form.savingAccount]);
-
-  const {
-    maturityData,
-    loading: maturityLoading,
-    error: maturityError,
-  } = useCalculateMaturity(
-    form.depositAmount,
-    '02',
-    form.periodType === 'Months' ? form.depositPeriod : '0',
-    form.periodType === 'Days' ? form.depositPeriod : '0',
-  );
-
-  useEffect(() => {
-    console.log('maturityData from hook:', maturityData);
-  }, [maturityData]);
 
   const applyFdRules = (
     next: FDForm,
@@ -275,20 +308,49 @@ export default function OpenFD() {
     if (!form.periodType) e.periodType = 'Please select period type';
     if (!form.depositPeriod.trim() || isNaN(Number(form.depositPeriod)) || Number(form.depositPeriod) < 1)
       e.depositPeriod = 'Enter a valid deposit period';
-    else if (interestRateLoading)
-      e.depositPeriod = 'Fetching interest rate…';
-    else if (interestRate === null && form.depositType && form.periodType)
-      e.depositPeriod = interestRateError || 'Interest rate could not be fetched for this tenure';
     if (!form.nomineeSource) e.nomineeSource = 'Please select nominee option';
-    setErrors(e);
-    if (Object.keys(e).length > 0) return false;
 
-    if (form.nomineeSource === 'new') {
-      const ne = validateNomineeFields(nominee);
-      setNomineeErrors(ne);
-      return Object.keys(ne).length === 0;
+    const ne: NomineeFieldErrors = form.nomineeSource === 'new'
+      ? validateNomineeFields(nominee)
+      : {};
+
+    setErrors(e);
+    setNomineeErrors(ne);
+
+    for (const field of FD_FIELD_ORDER) {
+      if (e[field]) {
+        focusFormField(fdFieldId(field));
+        return false;
+      }
     }
+
+    for (const field of NOMINEE_FIELD_ORDER) {
+      if (ne[field]) {
+        focusFormField(fdFieldId(field));
+        return false;
+      }
+    }
+
     return true;
+  };
+
+  const handleReview = () => {
+    if (validate()) setStep('confirm');
+  };
+
+  const handleResendOtp = async () => {
+    if (!otpCountdown.expired) return;
+    setLoading(true);
+    setApiError('');
+    try {
+      await sendOtp(customer.mobileNo, 'TDACCOUNTOPEN');
+      otpCountdown.restart();
+      setApiError('');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to resend OTP');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const acc = accounts.find(a => a.value === form.savingAccount);
@@ -331,6 +393,7 @@ export default function OpenFD() {
         <div className="form-group">
           <label className="form-label">Debit Savings Account <span className="required">*</span></label>
           <Select
+            id="fd-savingAccount"
             className={errors.savingAccount ? 'is-error' : ''}
             value={form.savingAccount}
             placeholder="Select savings account"
@@ -344,6 +407,7 @@ export default function OpenFD() {
         <div className="form-group">
           <label className="form-label">Deposit Amount (₹) <span className="required">*</span></label>
           <input
+            id="fd-depositAmount"
             className={`form-input ${errors.depositAmount ? 'is-error' : ''}`}
             placeholder="Minimum ₹1,000"
             value={form.depositAmount}
@@ -356,6 +420,7 @@ export default function OpenFD() {
         <div className="form-group">
           <label className="form-label">Deposit Type <span className="required">*</span></label>
           <Select
+            id="fd-depositType"
             className={errors.depositType ? 'is-error' : ''}
             value={form.depositType}
             placeholder="Select deposit type"
@@ -371,6 +436,7 @@ export default function OpenFD() {
         <div className="form-group">
           <label className="form-label">Renewal <span className="required">*</span></label>
           <Select
+            id="fd-renewalRequired"
             className={errors.renewalRequired ? 'is-error' : ''}
             value={form.renewalRequired}
             placeholder="Select renewal option"
@@ -387,6 +453,7 @@ export default function OpenFD() {
         <div className="form-group">
           <label className="form-label">Interest Pay Mode <span className="required">*</span></label>
           <Select
+            id="fd-interestPayMode"
             className={errors.interestPayMode ? 'is-error' : ''}
             value={form.interestPayMode}
             placeholder="Select mode"
@@ -406,8 +473,13 @@ export default function OpenFD() {
             <div className="radio-group horizontal">
               {(['Days', 'Months'] as const).map(t => (
                 <label key={t} className={`radio-option ${form.periodType === t ? 'selected' : ''}`}>
-                  <input type="radio" name="periodType" checked={form.periodType === t}
-                    onChange={() => set('periodType', t)} />
+                  <input
+                    id={t === 'Days' ? 'fd-periodType-days' : 'fd-periodType-months'}
+                    type="radio"
+                    name="periodType"
+                    checked={form.periodType === t}
+                    onChange={() => set('periodType', t)}
+                  />
                   <span className="radio-label">{t}</span>
                 </label>
               ))}
@@ -418,6 +490,7 @@ export default function OpenFD() {
           <div className="form-group form-group-full">
             <label className="form-label">Deposit Period <span className="required">*</span></label>
             <input
+              id="fd-depositPeriod"
               className={`form-input ${errors.depositPeriod ? 'is-error' : ''}`}
               placeholder={form.periodType === 'Days' ? 'e.g. 180' : 'e.g. 12'}
               value={form.depositPeriod}
@@ -449,9 +522,6 @@ export default function OpenFD() {
         {maturityLoading && (
           <p className="form-hint">Calculating maturity amount…</p>
         )}
-        {maturityError && (
-          <p className="form-hint form-error">{maturityError}</p>
-        )}
         {maturityData && (
           <div className="card fd-preview-card">
             <div className="card-title fd-preview-title">
@@ -474,6 +544,12 @@ export default function OpenFD() {
               </span>
             </div>
             <div className="summary-row">
+              <span className="summary-key">Maturity Date</span>
+              <span className="summary-val">
+                {formatDDMMYYYY(maturityData.maturityDate)}
+              </span>
+            </div>
+            <div className="summary-row">
               <span className="summary-key">Maturity Amount</span>
               <span className="summary-val fd-maturity-amount">
                 ₹ {maturityData.maturityAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
@@ -484,6 +560,11 @@ export default function OpenFD() {
                 Interest is paid {form.interestPayMode.toLowerCase()}; maturity amount is the principal returned at tenure end.
               </p>
             )}
+            {maturityData.isEstimate && (
+              <p className="form-hint fd-preview-note">
+                Estimated preview — final values are confirmed at account opening.
+              </p>
+            )}
           </div>
         )}
 
@@ -492,10 +573,12 @@ export default function OpenFD() {
         <div className="form-group">
           <label className="form-label">Add Nominee <span className="required">*</span></label>
           <Select
+            id="fd-nomineeSource"
             className={errors.nomineeSource ? 'is-error' : ''}
             value={form.nomineeSource}
-            placeholder="Select nominee option"
+            placeholder={nomineeLoading ? 'Loading nominee options…' : 'Select nominee option'}
             options={nomineeOptions}
+            disabled={nomineeLoading}
             onChange={v => set('nomineeSource', v as NomineeSource)}
           />
           {errors.nomineeSource && <p className="form-error">⚠ {errors.nomineeSource}</p>}
@@ -520,7 +603,13 @@ export default function OpenFD() {
         {form.nomineeSource === 'new' && (
           <>
             <div className="section-heading">Nominee Details</div>
-            <NomineeFields values={nominee} errors={nomineeErrors} onChange={setNomineeField} relationType='relation' />
+            <NomineeFields
+              values={nominee}
+              errors={nomineeErrors}
+              onChange={setNomineeField}
+              relationType="relation"
+              fieldIdPrefix="fd"
+            />
           </>
         )}
 
@@ -533,7 +622,7 @@ export default function OpenFD() {
       </div>
     </div>
       <Actions>
-        <button className="btn btn-primary" onClick={() => { if (validate()) setStep('confirm'); }}>
+        <button className="btn btn-primary" onClick={handleReview}>
           Review →
         </button>
       </Actions>
@@ -556,6 +645,7 @@ export default function OpenFD() {
         <div className="summary-row"><span className="summary-key">Interest Pay Mode</span><span className="summary-val">{form.interestPayMode}</span></div>
         <div className="summary-row"><span className="summary-key">Period</span><span className="summary-val">{form.depositPeriod} {form.periodType}</span></div>
         {maturityData && <>
+          <div className="summary-row"><span className="summary-key">Maturity Date</span><span className="summary-val">{formatDDMMYYYY(maturityData.maturityDate)}</span></div>
           <div className="summary-row"><span className="summary-key">Interest Earned</span><span className="summary-val">₹ {maturityData.interestAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
           <div className="summary-row"><span className="summary-key">Maturity Amount</span><span className="summary-val">₹ {maturityData.maturityAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
         </>}
@@ -588,19 +678,39 @@ export default function OpenFD() {
       <div className="card otp-screen">
         <div className="card-title" style={{ justifyContent: 'center' }}><span className="card-icon">📱</span>OTP Verification</div>
         <p className="otp-subtitle">Enter the 5-digit OTP sent to your registered mobile number to authorise the FD</p>
+        <p className="form-hint" style={{ textAlign: 'center', marginBottom: 12 }}>
+          {otpCountdown.expired
+            ? 'OTP has expired. Please request a new OTP.'
+            : `OTP expires in ${otpCountdown.label}`}
+        </p>
         <OTPInput
-                 onComplete={async (otp) => {
-                   setLoading(true);
-                   try {
-                     await handleOtpComplete(otp);
-                   } finally {
-                     setLoading(false);
-                   }
-                 }}
-               />
+          onComplete={async (otp) => {
+            if (otpCountdown.expired) {
+              setApiError('OTP has expired. Please tap Resend OTP.');
+              return;
+            }
+            setLoading(true);
+            try {
+              await handleOtpComplete(otp);
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
         {loading && <p style={{ marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>Verifying…</p>}
         {apiError && <p className="form-error" style={{ marginTop: 14 }}>⚠ {apiError}</p>}
-        <p className="resend-text">Didn't receive OTP? <span className="resend-link">Resend OTP</span></p>
+        <p className="resend-text">
+          Didn't receive OTP?{' '}
+          <button
+            type="button"
+            className="resend-link"
+            style={{ background: 'none', border: 'none', padding: 0, cursor: otpCountdown.expired && !loading ? 'pointer' : 'not-allowed', opacity: otpCountdown.expired && !loading ? 1 : 0.5 }}
+            disabled={!otpCountdown.expired || loading}
+            onClick={handleResendOtp}
+          >
+            Resend OTP
+          </button>
+        </p>
       </div>
     </div>
       <Actions>
