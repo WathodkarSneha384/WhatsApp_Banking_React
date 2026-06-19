@@ -2,74 +2,68 @@ import { useEffect, useState } from 'react';
 import { calculateMaturity } from '../services/api';
 
 export function useCalculateMaturity(
-    depositAmount: string,
-    schemeCode: string,
-    months: string,
-    days: string,
+  depositAmount: string,
+  schemeCode: string,
+  months: string,
+  days: string,
 ) {
-    const [maturityData, setMaturityData] = useState<any>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
+  const [maturityData, setMaturityData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-    useEffect(() => {
-        console.log('useCalculateMaturity triggered');
+  useEffect(() => {
+    const amount = Number(depositAmount);
+    const monthNum = Number(months);
+    const dayNum = Number(days);
 
-        if (!depositAmount || !schemeCode) {
-            setMaturityData(null);
-            return;
+    if (
+      !schemeCode ||
+      !depositAmount.trim() ||
+      Number.isNaN(amount) ||
+      amount < 1000 ||
+      (monthNum <= 0 && dayNum <= 0)
+    ) {
+      setMaturityData(null);
+      setError('');
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    setLoading(true);
+    setError('');
+
+    calculateMaturity(amount, schemeCode, monthNum, dayNum)
+      .then((res) => {
+        if (!cancelled) {
+          setMaturityData(res);
         }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Unable to calculate maturity',
+          );
+          setMaturityData(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
 
-        console.log('Calling API with:', {
-            depositAmount,
-            schemeCode,
-            months,
-            days,
-        });
-
-
-        let cancelled = false;
-
-        setLoading(true);
-        setError('');
-
-        calculateMaturity(
-            Number(depositAmount),
-            schemeCode,
-            Number(months),
-            Number(days),
-        )
-            .then((res) => {
-                console.log('API Response in Hook:', res);
-
-                if (!cancelled) {
-                    setMaturityData(res);
-                }
-            })
-            .catch((err) => {
-                console.error('Maturity Error:', err);
-
-                if (!cancelled) {
-                    setError(
-                        err instanceof Error
-                            ? err.message
-                            : 'Unable to calculate maturity'
-                    );
-                }
-            })
-            .finally(() => {
-                if (!cancelled) {
-                    setLoading(false);
-                }
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [depositAmount, schemeCode, months, days]);
-
-    return {
-        maturityData,
-        loading,
-        error,
+    return () => {
+      cancelled = true;
     };
+  }, [depositAmount, schemeCode, months, days]);
+
+  return {
+    maturityData,
+    loading,
+    error,
+  };
 }

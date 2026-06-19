@@ -98,6 +98,28 @@ function assertSuccess(data: BankApiResponse, fallback = 'Request failed'): void
   throw new Error(data.errorMsg || data.message || data.userMsg || fallback);
 }
 
+async function parseApiResponse<T>(response: Response, endpoint: string): Promise<T> {
+  const text = await response.text();
+
+  if (!text.trim()) {
+    throw new Error(
+      response.ok
+        ? `Empty response from bank service (${endpoint}).`
+        : `Bank service unavailable (${response.status}). Please try again later.`,
+    );
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(
+      response.ok
+        ? `Invalid response from bank service (${endpoint}).`
+        : `Bank service error (${response.status}). Please contact support if this continues.`,
+    );
+  }
+}
+
 async function postEndpoint<T extends BankApiResponse>(
   endpoint: string,
   payload: Record<string, unknown>,
@@ -115,7 +137,7 @@ async function postEndpoint<T extends BankApiResponse>(
     body: JSON.stringify(payload),
   });
 
-  const data = (await response.json()) as T;
+  const data = await parseApiResponse<T>(response, endpoint);
 
   console.log('API DATA:', data);
 
@@ -123,15 +145,8 @@ async function postEndpoint<T extends BankApiResponse>(
     throw new Error(data.errorMsg || data.message || `Request failed: ${endpoint}`);
   }
 
-  try {
-
-    if (validate) {
+  if (validate) {
     assertSuccess(data);
-  }
-
-  } catch (e) {
-    console.error('assertSuccess failed:', e);
-    throw e;
   }
 
   return data;
@@ -668,23 +683,13 @@ export async function fetchCalculateMaturity(
   months: number,
   days: number,
 ) {
-
-  console.log('fetchCalculateMaturity called');
   const timeStamp = generateTimestamp();
+  const amountStr = `${depositAmount}.0`;
 
-  const checksumParams = [
-    String(depositAmount + ".0"),
-    schemeCode,
-    String(months)
-  ];
-
-
-
+  const checksumParams = [amountStr, schemeCode, String(months)];
   if (days > 0) {
     checksumParams.push(String(days));
   }
-
-
 
   const checkSum = generateChecksum(
     SECRET_KEY,
@@ -694,50 +699,29 @@ export async function fetchCalculateMaturity(
     PASSWORD,
     ...checksumParams,
   );
-  // console.log('Generated Checksum:', checkSum);
-  console.log('Sending payload:', {
-    depositAmount,
-    schemeCode,
-    months,
-    days,
-  });
-  const response =
-  //  await fetch(
-  //   `/dmCmsService/rest/endpoints/calculateMaturity_MB`,
-  //   {
-  //     method: 'POST',
-  //     headers: { 'Content-Type': 'application/json' },
-  //     body: JSON.stringify({
-  //      ...basePayload('calculateMaturity_MB', checkSum),
-  //     timeStamp,
-  //     depositAmount,
-  //     schemeCode,
-  //     months,
-  //     days,
-  //     }),
-  //   }
-  // );
-  
-  
-  
-  
-  await postEndpoint(
+
+  const data = await postEndpoint<BankApiResponse & {
+    interestRate?: number | string;
+    maturityAmount?: number | string;
+    interestAmount?: number | string;
+  }>(
     'calculateMaturity_MB',
     {
       ...basePayload('calculateMaturity_MB', checkSum),
       timeStamp,
-      depositAmount,
+      depositAmount: amountStr,
       schemeCode,
       months,
       days,
     },
-    false 
+    false,
   );
 
-  console.log('API Raw Response:', response);
+  if (data.errorCode && data.errorCode !== '00' && data.status !== '00') {
+    throw new Error(data.errorMsg || data.message || 'Unable to calculate maturity');
+  }
 
-
-  return response;
+  return data;
 }
 
 
