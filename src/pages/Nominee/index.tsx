@@ -143,7 +143,7 @@ export default function Nominee() {
     setApiError('');
     setOtpVerified(false);
     try {
-      await sendOtp(customer.mobileNo, 'TDACCOUNTOPEN');
+      await sendOtp(customer.mobileNo, 'NOMINEEREGOTP');
       setStep('otp');
     } catch (err) {
       setApiError(err instanceof Error ? err.message : 'Failed to send OTP');
@@ -154,7 +154,7 @@ export default function Nominee() {
   const handleOtpComplete = async (otp: string) => {
     setApiError('');
     try {
-      await validateOtp(customer.mobileNo, otp, 'TDACCOUNTOPEN');
+      await validateOtp(customer.mobileNo, otp, 'NOMINEEREGOTP');
       setOtpVerified(true);
       setStep('submit');
     } catch (err) {

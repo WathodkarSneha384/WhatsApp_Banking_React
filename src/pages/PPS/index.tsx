@@ -193,7 +193,7 @@ export default function PPS() {
     setApiError('');
     setOtpVerified(false);
     try {
-      await sendOtp(customer.mobileNo, 'TDACCOUNTOPEN');
+      await sendOtp(customer.mobileNo, 'PPSCREATE');
       setStep('otp');
     } catch (err) {
       setApiError(err instanceof Error ? err.message : 'Failed to send OTP');
@@ -205,7 +205,7 @@ export default function PPS() {
   const handleOtpComplete = async (otp: string) => {
     setApiError('');
     try {
-      await validateOtp(customer.mobileNo, otp, 'TDACCOUNTOPEN');
+      await validateOtp(customer.mobileNo, otp, 'PPSCREATE');
       setOtpVerified(true);
       setStep('submit');
     } catch (err) {

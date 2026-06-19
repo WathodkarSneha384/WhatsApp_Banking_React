@@ -26,10 +26,10 @@ function envOrDefault(name: string, fallback: string): string {
 export const apiConfig = {
   apiBase: resolveApiBase(),
   bank: envOrDefault('VITE_BANK_CODE', '068'),
-  secretKey: envOrDefault('VITE_API_SECRET_KEY', ''),
+  secretKey: envOrDefault('VITE_API_SECRET_KEY', '35fc015d9308f316bd524c824cce9cd56ea7e455c6fe5b37bf'),
   vendor: envOrDefault('VITE_API_VENDOR', 'MOBILE'),
   username: envOrDefault('VITE_API_USERNAME', 'MOBILE'),
-  password: envOrDefault('VITE_API_PASSWORD', ''),
+  password: envOrDefault('VITE_API_PASSWORD', '95700e3a92830ae20ce0bddb23a2c1178f96017d70362572be90e293598c6126'),
   channel: envOrDefault('VITE_API_CHANNEL', 'WB'),
 } as const;
 

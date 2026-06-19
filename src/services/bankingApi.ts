@@ -417,7 +417,7 @@ export function getFdInterestRate(input: {
   );
 }
 
-export async function sendOtp(mobileNo: string, otpRequiredFor: 'TDACCOUNTOPEN'): Promise<void> {
+export async function sendOtp(mobileNo: string, otpRequiredFor: string): Promise<void> {
   const timeStamp = generateTimestamp();
   const checkSum = generateChecksum(
     SECRET_KEY, VENDOR, 'sendotp', USERNAME, PASSWORD, mobileNo, BANK,
@@ -438,7 +438,7 @@ export async function sendOtp(mobileNo: string, otpRequiredFor: 'TDACCOUNTOPEN')
 export async function validateOtp(
   mobileNo: string,
   otp: string,
-  otpValidateFor: 'TDACCOUNTOPEN',
+  otpValidateFor: string,
 ): Promise<void> {
   const timeStamp = generateTimestamp();
   const checkSum = generateChecksum(
@@ -488,11 +488,10 @@ export async function createPPSChequeEntry(input: {
     PASSWORD,
     accountNo,
     chequeNo,
-    chequeAmount,
-    issueDate,
-    CHANNEL,
-    payeeName,
-    mobileNo,
+    // issueDate,
+    // chequeAmount,
+    // payeeName,
+    // CHANNEL,
   );
 
   const data = await postEndpoint<BankApiResponse & { resStatus?: string }>(

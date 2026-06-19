@@ -116,7 +116,7 @@ export default function PMSocial() {
     setLoading(true);
     setApiError('');
     try {
-      await sendOtp(customer.mobileNo, 'TDACCOUNTOPEN');
+      await sendOtp(customer.mobileNo, 'PMYSCHEMEOTP');
       setStep('otp');
     } catch (err) {
       setApiError(err instanceof Error ? err.message : 'Failed to send OTP');
@@ -135,7 +135,7 @@ export default function PMSocial() {
 
     setLoading(true);
     try {
-      await validateOtp(customer.mobileNo, otp, 'TDACCOUNTOPEN');
+      await validateOtp(customer.mobileNo, otp, 'PMYSCHEMEOTP');
       const result = await doProcessPMJJBYSBY({
         customerId: customer.customerId,
         debitAccountNumber: savingAccount,
