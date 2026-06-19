@@ -6,7 +6,7 @@ import { Stepper, Actions } from '../../components/ServiceShell';
 import { useAccounts } from '../../hooks/useAccounts';
 import { usePPSParameters } from '../../hooks/usePPSParameters';
 import { createPPSChequeEntry, sendOtp, validateOtp } from '../../services/api';
-import { minIssueDate, toInputDate } from '../../utils/date';
+import { toInputDate } from '../../utils/date';
 
 type Mode = 'entry' | 'view';
 type Step = 'select' | 'form' | 'confirm' | 'otp' | 'submit' | 'success';
@@ -157,22 +157,24 @@ export default function PPS() {
       today.setHours(0, 0, 0, 0);
       const oldest = new Date(today);
       oldest.setMonth(oldest.getMonth() - 3);
+      const latest = new Date(today);
+      latest.setMonth(latest.getMonth() + 3);
 
-      if (issue > today) e.issueDate = 'Issue date cannot be in the future';
-      else if (issue < oldest) e.issueDate = 'Issue date cannot be more than 3 months old';
+      if (issue < oldest) e.issueDate = 'Issue date cannot be more than 3 months old';
+      else if (issue > latest) e.issueDate = 'Issue date cannot be more than 3 months in the future';
     }
 
     if (!form.payeeName.trim()) e.payeeName = 'Payee name is required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
-  const minIssueDate = () => {
+  const getMinIssueDate = () => {
     const date = new Date();
     date.setMonth(date.getMonth() - 3);
     return toInputDate(date);
   };
 
-  const maxIssueDate = () => {
+  const getMaxIssueDate = () => {
     const date = new Date();
     date.setMonth(date.getMonth() + 3);
     return toInputDate(date);
@@ -405,12 +407,12 @@ export default function PPS() {
                 id="f_issueDate"
                 className={`fi ${errors.issueDate ? 'is-error' : ''}`}
                 type="date"
-                min={minIssueDate()}
-                max={maxIssueDate()}
+                min={getMinIssueDate()}
+                max={getMaxIssueDate()}
                 value={form.issueDate}
                 onChange={e => setField('issueDate', e.target.value)}
               />
-              <p className="fhint">Must be within the last 3 months and not a future date</p>
+              <p className="fhint">Must be within 3 months before or after today</p>
               {errors.issueDate && <p className="ferr">⚠ {errors.issueDate}</p>}
             </div>
             <div className="fg">
