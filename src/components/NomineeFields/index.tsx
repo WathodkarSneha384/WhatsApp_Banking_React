@@ -52,6 +52,9 @@ export function validateNomineeFields(
   const { requireGuardianDob = true } = options;
   const e: NomineeFieldErrors = {};
   if (!values.nomineeName.trim()) e.nomineeName = 'Nominee name is required';
+  if (!/^[A-Za-z\s]+$/.test(values.nomineeName.trim())) {
+  e.nomineeName = 'Nominee name must contain only letters and spaces';
+}
   if (!values.nomineeDob) e.nomineeDob = 'Date of birth is required';
   if (!values.relation) e.relation = 'Please select a relationship';
   if (isMinor(values.nomineeDob)) {

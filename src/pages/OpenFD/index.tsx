@@ -111,13 +111,14 @@ export default function OpenFD() {
     loading: maturityLoading,
   } = useCalculateMaturity(
     form.depositAmount,
-    '02',
+    form.depositType==='Simple'?'01':'02',
     form.periodType === 'Months' ? form.depositPeriod : '0',
     form.periodType === 'Days' ? form.depositPeriod : '0',
     form.periodType as 'Days' | 'Months' | '',
     form.depositType as 'Simple' | 'Compound' | '',
     form.interestPayMode,
   );
+  console.log('Deposite Type===',form.depositType,'Period Type===',form.periodType,'Deposit Period===',form.depositPeriod,'Interest Pay Mode===',form.interestPayMode);
   const fetchExistingNominee = async (accountNumber: string) => {
     if (!accountNumber) {
       setExistingNominee(null);
