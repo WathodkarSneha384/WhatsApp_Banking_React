@@ -4,10 +4,12 @@ import Select from '../../components/Select';
 import { Actions } from '../../components/ServiceShell';
 import NomineeFields, { type NomineeFieldValues, type NomineeFieldErrors, validateNomineeFields } from '../../components/NomineeFields';
 import { useFlow } from '../../context/FlowContext';
-import { useRedirectHome } from '../../hooks/useRedirectHome';
 import { useAccounts } from '../../hooks/useAccounts';
+import ServiceResultScreen from '../../components/ServiceResultScreen';
+import { useServiceFlowReset } from '../../hooks/useServiceFlowReset';
 import {
   getInterestPayModeOptions,
+  getInterestEarnedLabel,
   isInterestPayModeReadonly,
   isPeriodicInterestPayMode,
   RENEWAL_REQUIRED_OPTIONS,
@@ -20,11 +22,20 @@ import {
 import { useCalculateMaturity } from '../../hooks/useCalculateMaturity';
 import { useOtpCountdown } from '../../hooks/useOtpCountdown';
 import { formatDDMMYYYY } from '../../utils/date';
+import AccountDisplay from '../../components/AccountDisplay';
 import { openFDAccount, sendOtp, validateOtp, verifyExistingNominees } from '../../services/bankingApi';
 
 type NomineeSource = 'existing' | 'new' | 'no';
-type Step = 'form' | 'confirm' | 'otp' | 'success';
-const STEP_NUM: Record<Step, number> = { form: 1, confirm: 2, otp: 3, success: 4 };
+type Step = 'form' | 'confirm' | 'otp' | 'result';
+const STEP_NUM: Record<Step, number> = { form: 1, confirm: 2, otp: 3, result: 4 };
+
+interface OperationResult {
+  status: 'success' | 'error';
+  title: string;
+  message: string;
+  refNo?: string;
+  refLabel?: string;
+}
 
 interface FDForm {
   savingAccount: string;
@@ -98,7 +109,8 @@ export default function OpenFD() {
   const [loading, setLoading] = useState(false);
   const [refNo] = useState(() => 'FD' + Date.now().toString().slice(-8));
   const [fdAccNo] = useState(() => 'FD' + Math.floor(Math.random() * 9000000 + 1000000));
-  useRedirectHome(step === 'success');
+  const [operationResult, setOperationResult] = useState<OperationResult | null>(null);
+  const resetToServiceHome = useServiceFlowReset('openfd');
 
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
   const [existingNominee, setExistingNominee] = useState<any>(null);
@@ -290,14 +302,23 @@ export default function OpenFD() {
       // Optional:
       // setFdAccNo(response.fdAccountNo);
 
-      setStep('success');
+      setOperationResult({
+        status: 'success',
+        title: 'FD Opened Successfully!',
+        message: 'Your Fixed Deposit has been opened. A confirmation will be sent to your registered mobile number.',
+        refNo: fdAccNo,
+        refLabel: 'FD Account Number',
+      });
+      setStep('result');
     } catch (err) {
-      setApiError(
-        err instanceof Error
-          ? err.message
-          : 'FD opening failed'
-      );
-      throw err;
+      const message = err instanceof Error ? err.message : 'FD opening failed';
+      setApiError(message);
+      setOperationResult({
+        status: 'error',
+        title: 'FD Opening Failed',
+        message,
+      });
+      setStep('result');
     }
   };
 
@@ -368,26 +389,28 @@ export default function OpenFD() {
     form.renewalRequired,
   );
 
-  /* ── SUCCESS ── */
-  if (step === 'success') return (
-    <>      <div className="flow-content">
-      <div className="success-screen">
-        <div className="success-icon">🏦</div>
-        <h2 className="success-title">FD Opened Successfully!</h2>
-        <p className="success-msg">Your Fixed Deposit has been opened. A confirmation will be sent to your registered mobile number.</p>
-        <div className="ref-box">
-          <div className="ref-label">FD Account Number</div>
-          <div className="ref-value">{fdAccNo}</div>
-        </div>
-        <div className="ref-box" style={{ background: '#eef3fb', borderColor: '#c5d6f5' }}>
-          <div className="ref-label">Reference Number</div>
-          <div className="ref-value" style={{ color: 'var(--primary)', fontSize: 17 }}>{refNo}</div>
-        </div>
-        <p className="redirect-hint">Redirecting to home…</p>
-      </div>
-    </div>
-    </>
-  );
+  const interestEarnedLabel = getInterestEarnedLabel(form.interestPayMode);
+
+  if (step === 'result' && operationResult) {
+    return (
+      <ServiceResultScreen
+        variant={operationResult.status}
+        icon={operationResult.status === 'success' ? '🏦' : undefined}
+        title={operationResult.title}
+        message={operationResult.message}
+        refNo={operationResult.refNo}
+        refLabel={operationResult.refLabel}
+        onCancel={resetToServiceHome}
+      >
+        {operationResult.status === 'success' && (
+          <div className="ref-box" style={{ background: '#eef3fb', borderColor: '#c5d6f5', marginTop: 12 }}>
+            <div className="ref-label">Reference Number</div>
+            <div className="ref-value" style={{ color: 'var(--primary)', fontSize: 17 }}>{refNo}</div>
+          </div>
+        )}
+      </ServiceResultScreen>
+    );
+  }
 
   /* ── FD DETAILS FORM ── */
   if (step === 'form') return (
@@ -396,12 +419,12 @@ export default function OpenFD() {
         <div className="card-title"><span className="card-icon">🏦</span>Fixed Deposit Details</div>
 
         <div className="form-group">
-          <label className="form-label">Debit Savings Account <span className="required">*</span></label>
+          <label className="form-label">Debit Account <span className="required">*</span></label>
           <Select
             id="fd-savingAccount"
             className={errors.savingAccount ? 'is-error' : ''}
             value={form.savingAccount}
-            placeholder="Select savings account"
+            placeholder="Select account"
             options={accounts}
             onChange={v => set('savingAccount', v)}
           />
@@ -541,7 +564,7 @@ export default function OpenFD() {
               <span className="summary-val">{maturityData.interestRate}% p.a.</span>
             </div>
             <div className="summary-row">
-              <span className="summary-key">Interest Earned</span>
+              <span className="summary-key">{interestEarnedLabel}</span>
               <span className="summary-val">
                 ₹ {Number(maturityData.interestAmount).toLocaleString('en-IN', {
                   maximumFractionDigits: 2,
@@ -621,7 +644,7 @@ export default function OpenFD() {
         {form.nomineeSource === 'existing' && (
           <div className="info-box" style={{ marginTop: 4 }}>
             <span className="info-icon">ℹ️</span>
-            <span>The nominee linked to {acc?.label ?? 'your account'} will be applied to this FD.</span>
+            <span>The nominee linked to <AccountDisplay account={acc} /> will be applied to this FD.</span>
           </div>
         )}
       </div>
@@ -643,7 +666,7 @@ export default function OpenFD() {
       </div>
       <div className="card">
         <div className="card-title"><span className="card-icon">🏦</span>FD Details</div>
-        <div className="summary-row"><span className="summary-key">Debit Account</span><span className="summary-val">{acc?.label}</span></div>
+        <div className="summary-row"><span className="summary-key">Debit Account</span><span className="summary-val"><AccountDisplay account={acc} /></span></div>
         <div className="summary-row"><span className="summary-key">Deposit Amount</span><span className="summary-val">₹ {Number(form.depositAmount).toLocaleString('en-IN')}</span></div>
         <div className="summary-row"><span className="summary-key">Deposit Type</span><span className="summary-val">{form.depositType}</span></div>
         <div className="summary-row"><span className="summary-key">Renewal</span><span className="summary-val">{form.renewalRequired}</span></div>
@@ -651,7 +674,7 @@ export default function OpenFD() {
         <div className="summary-row"><span className="summary-key">Period</span><span className="summary-val">{form.depositPeriod} {form.periodType}</span></div>
         {maturityData && <>
           <div className="summary-row"><span className="summary-key">Maturity Date</span><span className="summary-val">{formatDDMMYYYY(maturityData.maturityDate)}</span></div>
-          <div className="summary-row"><span className="summary-key">Interest Earned</span><span className="summary-val">₹ {maturityData.interestAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
+          <div className="summary-row"><span className="summary-key">{interestEarnedLabel}</span><span className="summary-val">₹ {maturityData.interestAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
           <div className="summary-row"><span className="summary-key">Maturity Amount</span><span className="summary-val">₹ {maturityData.maturityAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
         </>}
         <div className="summary-row"><span className="summary-key">Interest Rate</span><span className="summary-val">{maturityData?.interestRate != null ? `${maturityData.interestRate}% p.a.` : '—'}</span></div>
@@ -677,6 +700,9 @@ export default function OpenFD() {
           </button>
         </div>
         {apiError && <p className="form-error" style={{ marginTop: 12 }}>⚠ {apiError}</p>}
+        <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
+          Cancel
+        </button>
       </Actions>
     </>
   );
@@ -724,6 +750,7 @@ export default function OpenFD() {
     </div>
       <Actions>
         <button className="btn btn-secondary" onClick={() => setStep('confirm')}>← Back</button>
+        <button type="button" className="btn btn-secondary" onClick={resetToServiceHome}>Cancel</button>
       </Actions>
     </>
   );

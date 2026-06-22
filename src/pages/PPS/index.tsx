@@ -1,15 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
 import { useFlow } from '../../context/FlowContext';
-import { useRedirectHome, useGoHome } from '../../hooks/useRedirectHome';
+import ServiceResultScreen from '../../components/ServiceResultScreen';
+import { useServiceFlowReset } from '../../hooks/useServiceFlowReset';
 import Select from '../../components/Select';
 import { Stepper, Actions } from '../../components/ServiceShell';
 import { useAccounts } from '../../hooks/useAccounts';
 import { usePPSParameters } from '../../hooks/usePPSParameters';
 import { createPPSChequeEntry, sendOtp, validateOtp } from '../../services/api';
+import AccountDisplay from '../../components/AccountDisplay';
 import { toInputDate } from '../../utils/date';
 
 type Mode = 'entry' | 'view';
-type Step = 'select' | 'form' | 'confirm' | 'otp' | 'submit' | 'success';
+type Step = 'select' | 'form' | 'confirm' | 'otp' | 'submit' | 'result';
+
+interface OperationResult {
+  status: 'success' | 'error';
+  title: string;
+  message: string;
+  refNo?: string;
+}
 
 interface EntryForm {
   accountNo: string;
@@ -22,7 +31,7 @@ interface EntryForm {
 const ENTRY_STEPS = ['Select Service', 'Enter Details', 'Review', 'Verify OTP', 'Submit', 'Done'];
 const VIEW_STEPS = ['Select Service', 'Search', 'Result'];
 
-const STEP_NUM: Record<Step, number> = { select: 1, form: 2, confirm: 3, otp: 4, submit: 5, success: 6 };
+const STEP_NUM: Record<Step, number> = { select: 1, form: 2, confirm: 3, otp: 4, submit: 5, result: 6 };
 
 type FormErrors = Partial<Record<keyof EntryForm, string>>;
 
@@ -110,11 +119,10 @@ export default function PPS() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
-  const [refNo, setRefNo] = useState('');
   const [ppsStatus, setPpsStatus] = useState('');
   const [otpVerified, setOtpVerified] = useState(false);
-  const goHome = useGoHome();
-  useRedirectHome(step === 'success');
+  const [operationResult, setOperationResult] = useState<OperationResult | null>(null);
+  const resetToServiceHome = useServiceFlowReset('pps');
 
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
   const { params: ppsParams } = usePPSParameters();
@@ -193,7 +201,7 @@ export default function PPS() {
 
   const reviewSummary = (
     <div className="sum">
-      <div className="sumrow"><span className="k">Account</span><span className="v">{selectedAccount?.label}</span></div>
+      <div className="sumrow"><span className="k">Account</span><span className="v"><AccountDisplay account={selectedAccount} /></span></div>
       <div className="sumrow"><span className="k">Cheque Number</span><span className="v mono">{form.chequeNo}</span></div>
       <div className="sumrow"><span className="k">Amount</span><span className="v">₹ {Number(form.chequeAmount).toLocaleString('en-IN')}</span></div>
       <div className="sumrow"><span className="k">Issue Date</span><span className="v">{new Date(form.issueDate).toLocaleDateString('en-IN')}</span></div>
@@ -239,41 +247,46 @@ export default function PPS() {
         issueDate: form.issueDate,
         mobileNo: customer.mobileNo,
       });
-      setRefNo('PPS' + Date.now().toString().slice(-8));
+      const generatedRef = 'PPS' + Date.now().toString().slice(-8);
       setPpsStatus(result.resStatus);
-      setStep('success');
+      setOperationResult({
+        status: 'success',
+        title: 'PPS Entry Submitted!',
+        message: 'Your Positive Payment details have been registered. The cheque will be validated before payment processing.',
+        refNo: generatedRef,
+      });
+      setStep('result');
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Submission failed');
+      const message = err instanceof Error ? err.message : 'Submission failed';
+      setApiError(message);
+      setOperationResult({
+        status: 'error',
+        title: 'PPS Submission Failed',
+        message,
+      });
+      setStep('result');
     } finally {
       setLoading(false);
     }
   };
 
   const renderView = () => {
-    if (step === 'success') {
+    if (step === 'result' && operationResult) {
       return (
-        <div className="card">
-          <div className="done-wrap">
-            <div className="done-ic">✅</div>
-            <h2>PPS Entry Submitted!</h2>
-            <p>Your Positive Payment details have been registered. The cheque will be validated before payment processing.</p>
-            {ppsStatus && (
-              <div className="note info" style={{ textAlign: 'left', maxWidth: 430, margin: '0 auto 12px' }}>
-                <span>✅</span>
-                <span>Status: <strong>{ppsStatus}</strong></span>
-              </div>
-            )}
-            <div className="refbox">
-              <div className="rl">Reference Number</div>
-              <div className="rv">{refNo}</div>
+        <ServiceResultScreen
+          variant={operationResult.status}
+          title={operationResult.title}
+          message={operationResult.message}
+          refNo={operationResult.refNo}
+          onCancel={resetToServiceHome}
+        >
+          {operationResult.status === 'success' && ppsStatus && (
+            <div className="info-box" style={{ textAlign: 'left', maxWidth: 430, margin: '12px auto 0' }}>
+              <span className="info-icon">✅</span>
+              <span>Status: <strong>{ppsStatus}</strong></span>
             </div>
-            <div className="note info" style={{ textAlign: 'left', maxWidth: 430, margin: '0 auto' }}>
-              <span>ℹ️</span>
-              <span>A confirmation SMS will be sent to your registered mobile number. Save this reference for future queries.</span>
-            </div>
-            <p className="redirect-hint">Redirecting to home…</p>
-          </div>
-        </div>
+          )}
+        </ServiceResultScreen>
       );
     }
 
@@ -478,7 +491,7 @@ export default function PPS() {
   };
 
   const renderActions = () => {
-    if (step === 'success') {
+    if (step === 'result') {
       return null;
     }
     if (step === 'select') {
@@ -499,7 +512,7 @@ export default function PPS() {
     if (step === 'confirm' && mode === 'view') {
       return (
         <Actions>
-          <button type="button" className="btn btn-secondary" onClick={goHome}>Done</button>
+          <button type="button" className="btn btn-secondary" onClick={resetToServiceHome}>Cancel</button>
         </Actions>
       );
     }
@@ -518,6 +531,10 @@ export default function PPS() {
           <button type="button" className="btn btn-primary" disabled={loading} onClick={sendOtpAndProceed}>
             {loading ? 'Sending OTP…' : 'Continue to OTP Verification →'}
           </button>
+          {apiError && <p className="ferr" style={{ marginTop: 12 }}>⚠ {apiError}</p>}
+          <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
+            Cancel
+          </button>
         </Actions>
       );
     }
@@ -525,6 +542,7 @@ export default function PPS() {
       return (
         <Actions>
           <button type="button" className="btn btn-secondary" onClick={() => setStep('confirm')}>← Back</button>
+          <button type="button" className="btn btn-secondary" onClick={resetToServiceHome}>Cancel</button>
         </Actions>
       );
     }
@@ -534,6 +552,10 @@ export default function PPS() {
           <button type="button" className="btn btn-secondary" onClick={() => setStep('otp')} disabled={loading}>← Back</button>
           <button type="button" className="btn btn-primary" disabled={loading || !otpVerified} onClick={submitPpsEntry}>
             {loading ? 'Submitting…' : 'Submit PPS Entry →'}
+          </button>
+          {apiError && <p className="ferr" style={{ marginTop: 12 }}>⚠ {apiError}</p>}
+          <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
+            Cancel
           </button>
         </Actions>
       );

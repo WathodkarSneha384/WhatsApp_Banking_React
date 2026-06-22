@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 export interface SelectOption {
   value: string;
   label: string;
+  subLabel?: string;
 }
 
 interface SelectProps {
@@ -111,7 +112,12 @@ export default function Select({
             className={`select-option ${value === opt.value ? 'sel' : ''}`}
             onClick={() => pick(opt.value)}
           >
-            {opt.label}
+            <span className="select-option-content">
+              <span className="select-option-label">{opt.label}</span>
+              {opt.subLabel && (
+                <span className="select-option-sublabel">{opt.subLabel}</span>
+              )}
+            </span>
           </button>
         </li>
       ))}
@@ -135,8 +141,17 @@ export default function Select({
           setOpen(o => !o);
         }}
       >
-        <span className={selected ? 'select-value' : 'select-placeholder'}>
-          {selected ? selected.label : placeholder}
+        <span className={selected ? 'select-value-wrap' : 'select-placeholder'}>
+          {selected ? (
+            <span className="select-value-stack">
+              <span className="select-value">{selected.label}</span>
+              {selected.subLabel && (
+                <span className="select-value-sub">{selected.subLabel}</span>
+              )}
+            </span>
+          ) : (
+            placeholder
+          )}
         </span>
         <span className="select-chevron" aria-hidden="true" />
       </button>

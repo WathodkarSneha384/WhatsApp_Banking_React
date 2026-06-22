@@ -4,6 +4,7 @@ import { apiConfig } from '../config/apiConfig';
 import { cachedFetch, cachedFetch1 } from './requestCache';
 import { getInsurancePremiumDetails } from '../utils/pmPremium';
 import { estimateFdInterestRate } from '../utils/fdMaturity';
+import { maskAccountNumber } from '../utils/accountDisplay';
 
 const { apiBase: API_BASE, bank: BANK, secretKey: SECRET_KEY, vendor: VENDOR, username: USERNAME, password: PASSWORD, channel: CHANNEL } = apiConfig;
 
@@ -24,8 +25,10 @@ export interface CustomerProfile {
 
 export interface AccountOption {
   label: string;
+  subLabel: string;
   value: string;
   fullAccountNumber: string;
+  branchName: string;
   balance: number;
 }
 
@@ -79,19 +82,6 @@ export const generateTimestamp = () => {
     pad(now.getMilliseconds(), 3)
   );
 };
-
-function maskAccount(accountNo: string, branchName: string): string {
-  if (!accountNo) {
-    return branchName || '';
-  }
-
-  const maskedAccount =
-    accountNo.length > 4
-      ? 'X'.repeat(accountNo.length - 4) + accountNo.slice(-4)
-      : accountNo;
-
-  return `${branchName} - ${maskedAccount}`;
-}
 
 function assertSuccess(data: BankApiResponse, fallback = 'Request failed'): void {
   if (data.errorCode === '00' || data.status === '00') return;
@@ -205,10 +195,13 @@ export async function fetchAccounts(customerId: string): Promise<AccountOption[]
     const accountno = String(item.accountno ?? '');
     const fullAccountNumber = String(item.fullAccountNumber ?? accountno);
     const branchName = String(item.branchName ?? '');
+    const masked = maskAccountNumber(accountno);
     return {
-      label: maskAccount(accountno, branchName),
+      label: masked,
+      subLabel: branchName,
       value: fullAccountNumber,
       fullAccountNumber,
+      branchName,
       balance: Number(item.accountBal ?? 0),
     };
   });

@@ -1383,6 +1383,90 @@
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
+.bank-app .select-option-content,
+.bank-app .select-value-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bank-app .select-option-label,
+.bank-app .select-value {
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.bank-app .select-option-sublabel,
+.bank-app .select-value-sub {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.bank-app .select-value-wrap {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.bank-app .account-display {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bank-app .account-display-no {
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.bank-app .account-display-branch {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.bank-app .summary-val .account-display {
+  align-items: flex-end;
+}
+
+.bank-app .radio-option.account-radio-option {
+  align-items: flex-start;
+}
+
+.bank-app .radio-option.account-radio-option input[type="radio"] {
+  margin-top: 4px;
+}
+
+.bank-app .radio-group.area-type-options {
+  gap: 8px;
+}
+
+.bank-app .radio-group.area-type-options .radio-option {
+  padding: 8px 12px;
+  gap: 8px;
+  flex: 1;
+  align-items: center;
+  border-radius: 10px;
+}
+
+.bank-app .radio-group.area-type-options .radio-option input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  margin-top: 0;
+}
+
+.bank-app .radio-group.area-type-options .radio-label {
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
 /* ── MOBILE ALIGNMENT & THEME ACCENTS ───────────────────────── */
 
 .bank-app {

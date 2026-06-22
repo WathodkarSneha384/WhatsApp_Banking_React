@@ -3,15 +3,24 @@ import OTPInput from '../../components/OTPInput';
 import Select from '../../components/Select';
 import { Actions } from '../../components/ServiceShell';
 import NomineeFields, { type NomineeFieldValues, type NomineeFieldErrors, validateNomineeFields } from '../../components/NomineeFields';
+import AccountDisplay from '../../components/AccountDisplay';
 import { formatDDMMYYYY } from '../../utils/date';
 import { useFlow } from '../../context/FlowContext';
-import { useRedirectHome } from '../../hooks/useRedirectHome';
+import ServiceResultScreen from '../../components/ServiceResultScreen';
+import { useServiceFlowReset } from '../../hooks/useServiceFlowReset';
 import { useAccounts } from '../../hooks/useAccounts';
 import { nomineeRegistration, sendOtp, validateOtp, verifyExistingNominees } from '../../services/bankingApi';
 
 type NomineeType = 'new' | 'update';
-type Step = 'select' | 'form' | 'confirm' | 'otp' | 'submit' | 'success';
-const STEP_NUM: Record<Step, number> = { select: 1, form: 2, confirm: 3, otp: 4, submit: 5, success: 6 };
+type Step = 'select' | 'form' | 'confirm' | 'otp' | 'submit' | 'result';
+const STEP_NUM: Record<Step, number> = { select: 1, form: 2, confirm: 3, otp: 4, submit: 5, result: 6 };
+
+interface OperationResult {
+  status: 'success' | 'error';
+  title: string;
+  message: string;
+  refNo?: string;
+}
 
 const EMPTY_NOMINEE: NomineeFieldValues = {
   nomineeName: '', nomineeDob: '', relation: '',
@@ -28,7 +37,8 @@ export default function Nominee() {
   const [selectErrors, setSelectErrors] = useState({ accountNo: '', type: '' });
   const [loading, setLoading] = useState(false);
   const [refNo] = useState(() => 'NOM' + Date.now().toString().slice(-8));
-  useRedirectHome(step === 'success');
+  const [operationResult, setOperationResult] = useState<OperationResult | null>(null);
+  const resetToServiceHome = useServiceFlowReset('nominee');
 
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
   const [nomineeExists, setNomineeExists] = useState<boolean | null>(null);
@@ -93,7 +103,7 @@ export default function Nominee() {
 
   const reviewSummary = (
     <>
-      <div className="summary-row"><span className="summary-key">Account</span><span className="summary-val">{acc?.label}</span></div>
+      <div className="summary-row"><span className="summary-key">Account</span><span className="summary-val"><AccountDisplay account={acc} /></span></div>
       <div className="summary-row"><span className="summary-key">Action</span><span className="summary-val">{type === 'new' ? 'New Nominee' : 'Update Nominee'}</span></div>
       <div className="divider" />
       <div className="summary-row"><span className="summary-key">Nominee Name</span><span className="summary-val">{nominee.nomineeName}</span></div>
@@ -126,13 +136,33 @@ export default function Nominee() {
       });
 
       if (response?.status === '00' || response?.errorCode === '00') {
-        setStep('success');
+        setOperationResult({
+          status: 'success',
+          title: `Nominee ${type === 'new' ? 'Registered' : 'Updated'}!`,
+          message: `Nominee details for account ${acc?.label ?? ''}${acc?.branchName ? ` (${acc.branchName})` : ''} have been ${type === 'new' ? 'registered' : 'updated'} successfully.`,
+          refNo,
+        });
+        setStep('result');
       } else {
-        setApiError(response?.errorMsg || 'Nominee registration failed');
+        const message = response?.errorMsg || 'Nominee registration failed';
+        setApiError(message);
+        setOperationResult({
+          status: 'error',
+          title: 'Nominee Registration Failed',
+          message,
+        });
+        setStep('result');
       }
     } catch (error) {
       console.error('Nominee registration failed:', error);
-      setApiError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
+      const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+      setApiError(message);
+      setOperationResult({
+        status: 'error',
+        title: 'Nominee Registration Failed',
+        message,
+      });
+      setStep('result');
     } finally {
       setLoading(false);
     }
@@ -159,26 +189,20 @@ export default function Nominee() {
       setStep('submit');
     } catch (err) {
       setApiError(err instanceof Error ? err.message : 'OTP verification failed');
-      throw err;
     }
   };
 
-  /* ── SUCCESS ── */
-  if (step === 'success') return (
-    <>      <div className="flow-content">
-      <div className="success-screen">
-        <div className="success-icon">✅</div>
-        <h2 className="success-title">Nominee {type === 'new' ? 'Registered' : 'Updated'}!</h2>
-        <p className="success-msg">Nominee details for account {acc?.label} have been {type === 'new' ? 'registered' : 'updated'} successfully.</p>
-        <div className="ref-box">
-          <div className="ref-label">Reference Number</div>
-          <div className="ref-value">{refNo}</div>
-        </div>
-        <p className="redirect-hint">Redirecting to home…</p>
-      </div>
-    </div>
-    </>
-  );
+  if (step === 'result' && operationResult) {
+    return (
+      <ServiceResultScreen
+        variant={operationResult.status}
+        title={operationResult.title}
+        message={operationResult.message}
+        refNo={operationResult.refNo}
+        onCancel={resetToServiceHome}
+      />
+    );
+  }
 
   /* ── SELECT ACCOUNT & TYPE ── */
   if (step === 'select') return (
@@ -314,8 +338,12 @@ export default function Nominee() {
               {loading ? 'Sending OTP…' : 'Continue to OTP Verification →'}
             </button>
           </div>
-        </Actions>
-      </>
+        {apiError && <p className="form-error" style={{ marginTop: 12 }}>⚠ {apiError}</p>}
+        <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
+          Cancel
+        </button>
+      </Actions>
+    </>
     );
   }
 
@@ -342,6 +370,7 @@ export default function Nominee() {
     </div>
       <Actions>
         <button className="btn btn-secondary" onClick={() => setStep('confirm')}>← Back</button>
+        <button type="button" className="btn btn-secondary" onClick={resetToServiceHome}>Cancel</button>
       </Actions>
     </>
   );
@@ -369,6 +398,9 @@ export default function Nominee() {
               {loading ? 'Submitting…' : 'Submit Nominee Registration →'}
             </button>
           </div>
+          <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
+            Cancel
+          </button>
         </Actions>
       </>
     );

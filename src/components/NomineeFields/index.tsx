@@ -51,15 +51,20 @@ export function validateNomineeFields(
 ): NomineeFieldErrors {
   const { requireGuardianDob = true } = options;
   const e: NomineeFieldErrors = {};
-  if (!values.nomineeName.trim()) e.nomineeName = 'Nominee name is required';
-  if (!/^[A-Za-z\s]+$/.test(values.nomineeName.trim())) {
-  e.nomineeName = 'Nominee name must contain only letters and spaces';
-}
+  if (!values.nomineeName.trim()) {
+    e.nomineeName = 'Nominee name is required';
+  } else if (!/^[A-Za-z\s]+$/.test(values.nomineeName.trim())) {
+    e.nomineeName = 'Nominee name must contain only letters and spaces';
+  }
   if (!values.nomineeDob) e.nomineeDob = 'Date of birth is required';
   if (!values.relation) e.relation = 'Please select a relationship';
   if (isMinor(values.nomineeDob)) {
     if (!values.guardianName.trim()) e.guardianName = 'Guardian name is required for minor nominee';
-    if (requireGuardianDob && !values.guardianDob) e.guardianDob = 'Guardian date of birth is required';
+    if (requireGuardianDob && !values.guardianDob) {
+      e.guardianDob = 'Guardian date of birth is required';
+    } else if (values.guardianDob && isMinor(values.guardianDob)) {
+      e.guardianDob = 'Guardian must be 18 years or older';
+    }
     if (!values.guardianRelation) e.guardianRelation = 'Please select guardian relationship';
   }
   return e;
@@ -80,6 +85,7 @@ export default function NomineeFields({
 
   const minor = isMinor(values.nomineeDob);
   const age = calcAge(values.nomineeDob);
+  const guardianAge = calcAge(values.guardianDob);
 
   return (
     <>
@@ -164,6 +170,14 @@ export default function NomineeFields({
                 </p>
               )}
               {errors.guardianDob && <p className="form-error">⚠ {errors.guardianDob}</p>}
+              {guardianAge !== null && (
+                <div style={{ marginTop: 6 }}>
+                  {guardianAge < 18
+                    ? <span className="minor-badge">⚠️ Guardian must be 18 years or older</span>
+                    : <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>✓ Guardian age: {guardianAge} years</span>
+                  }
+                </div>
+              )}
             </div>
           )}
 

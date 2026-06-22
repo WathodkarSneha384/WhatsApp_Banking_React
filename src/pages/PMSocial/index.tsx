@@ -9,17 +9,26 @@ import {
   calcAge,
 } from '../../components/NomineeFields';
 import { useFlow } from '../../context/FlowContext';
-import { useRedirectHome } from '../../hooks/useRedirectHome';
 import { useAccounts } from '../../hooks/useAccounts';
+import ServiceResultScreen from '../../components/ServiceResultScreen';
+import { useServiceFlowReset } from '../../hooks/useServiceFlowReset';
 import { useInsurancePremium } from '../../hooks/useInsurancePremium';
 import type { PMSocialSubservice } from '../../types';
 import { doProcessPMJJBYSBY, sendOtp, validateOtp } from '../../services/api';
+import AccountDisplay from '../../components/AccountDisplay';
 import { PENSION_AMOUNT_OPTIONS } from '../../utils/pmPremium';
 
 type NomineeSource = 'existing' | 'new';
 type RuralOrUrban = 'Rural' | 'Urban';
-type Step = 'form' | 'confirm' | 'otp' | 'success';
-const STEP_NUM: Record<Step, number> = { form: 1, confirm: 2, otp: 3, success: 4 };
+type Step = 'form' | 'confirm' | 'otp' | 'result';
+const STEP_NUM: Record<Step, number> = { form: 1, confirm: 2, otp: 3, result: 4 };
+
+interface OperationResult {
+  status: 'success' | 'error';
+  title: string;
+  message: string;
+  refNo?: string;
+}
 
 const SCHEME_INFO: Record<PMSocialSubservice, { name: string; desc: string; premium: string; coverage: string; color: string }> = {
   PMJJBY: {
@@ -62,18 +71,18 @@ export default function PMSocial() {
   const [nomineeSource, setNomineeSource] = useState<NomineeSource | ''>('');
   const [nominee, setNominee] = useState<NomineeFieldValues>(EMPTY_NOMINEE);
   const [nomineeErrors, setNomineeErrors] = useState<NomineeFieldErrors>({});
-  const [ruralOrUrban, setRuralOrUrban] = useState<RuralOrUrban | ''>('');
+  const [ruralOrUrban, setRuralOrUrban] = useState<RuralOrUrban>('Urban');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
-  const [refNo, setRefNo] = useState('');
+  const [operationResult, setOperationResult] = useState<OperationResult | null>(null);
+  const resetToServiceHome = useServiceFlowReset('pmsocial');
 
   const insuranceScheme = subservice === 'PMJJBY' || subservice === 'PMSBY' ? subservice : null;
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
   const { premium: premiumDetails, loading: premiumLoading } = useInsurancePremium(insuranceScheme);
 
   useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step, setCurrentStep]);
-  useRedirectHome(step === 'success');
 
   if (!subservice) return null;
   const scheme = subservice;
@@ -85,7 +94,7 @@ export default function PMSocial() {
 
   const validateForm = () => {
     const e: Record<string, string> = {};
-    if (!savingAccount) e.savingAccount = 'Please select a savings account';
+    if (!savingAccount) e.savingAccount = 'Please select a debit account';
     if (scheme === 'PMAPY') {
       if (!pensionAmount) e.pensionAmount = 'Please select pension amount';
       if (!installmentFreq) e.installmentFreq = 'Please select installment frequency';
@@ -128,8 +137,14 @@ export default function PMSocial() {
   const handleOtpComplete = async (otp: string) => {
     setApiError('');
     if (scheme === 'PMAPY') {
-      setRefNo('PMS' + Date.now().toString().slice(-8));
-      setStep('success');
+      const generatedRef = 'PMS' + Date.now().toString().slice(-8);
+      setOperationResult({
+        status: 'success',
+        title: 'Enrollment Successful!',
+        message: `You've been enrolled in ${scheme}. The premium will be auto-debited from ${acc?.label ?? 'your account'}${acc?.branchName ? ` (${acc.branchName})` : ''} as per schedule.`,
+        refNo: generatedRef,
+      });
+      setStep('result');
       return;
     }
 
@@ -149,38 +164,42 @@ export default function PMSocial() {
         nomineeIsMinor: nomineeSource === 'new' && nomineeIsMinor,
         ruralOrUrban: ruralOrUrban === 'Urban' ? 'U' : 'R',
       });
-      setRefNo(result.referenceNumber);
-      setStep('success');
+      setOperationResult({
+        status: 'success',
+        title: 'Enrollment Successful!',
+        message: `You've been enrolled in ${scheme}. The premium will be auto-debited from ${acc?.label ?? 'your account'}${acc?.branchName ? ` (${acc.branchName})` : ''} as per schedule.`,
+        refNo: result.referenceNumber,
+      });
+      setStep('result');
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Enrollment failed');
-      throw err;
+      const message = err instanceof Error ? err.message : 'Enrollment failed';
+      setApiError(message);
+      setOperationResult({
+        status: 'error',
+        title: 'Enrollment Failed',
+        message,
+      });
+      setStep('result');
     } finally {
       setLoading(false);
     }
   };
 
-  /* ── SUCCESS ── */
-  if (step === 'success') return (
-    <>      <div className="flow-content">
-        <div className="success-screen">
-          <div className="success-icon">✅</div>
-          <h2 className="success-title">Enrollment Successful!</h2>
-          <p className="success-msg">
-            You've been enrolled in <strong>{scheme}</strong>. The premium will be auto-debited from {acc?.label} as per schedule.
-          </p>
-          <div className="ref-box">
-            <div className="ref-label">Reference Number</div>
-            <div className="ref-value">{refNo}</div>
-          </div>
-          <div className="info-box" style={{ textAlign: 'left', maxWidth: 400 }}>
-            <span className="info-icon">ℹ️</span>
-            <span>Coverage: {SCHEME_INFO[scheme].coverage} | Premium: {SCHEME_INFO[scheme].premium}</span>
-          </div>
-          <p className="redirect-hint">Redirecting to home…</p>
-        </div>
-      </div>
-    </>
-  );
+  const annualPremiumLabel = (scheme === 'PMJJBY' || scheme === 'PMSBY') && premiumDetails
+    ? `₹${premiumDetails.totalPremium.toLocaleString('en-IN')} / year`
+    : SCHEME_INFO[scheme].premium;
+
+  if (step === 'result' && operationResult) {
+    return (
+      <ServiceResultScreen
+        variant={operationResult.status}
+        title={operationResult.title}
+        message={operationResult.message}
+        refNo={operationResult.refNo}
+        onCancel={resetToServiceHome}
+      />
+    );
+  }
 
   /* ── ENROLLMENT DETAILS FORM ── */
   if (step === 'form') return (
@@ -191,18 +210,15 @@ export default function PMSocial() {
             <span className={`scheme-badge scheme-${scheme}`} style={{ marginLeft: 'auto' }}>{scheme}</span>
           </div>
           <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', marginBottom: 10 }}>{SCHEME_INFO[scheme].name}</p>
-          <div className="summary-row"><span className="summary-key">Annual Premium</span><span className="summary-val">{SCHEME_INFO[scheme].premium}</span></div>
-          <div className="summary-row"><span className="summary-key">Coverage / Benefit</span><span className="summary-val">{SCHEME_INFO[scheme].coverage}</span></div>
+          <div className="summary-row"><span className="summary-key">Annual Premium</span><span className="summary-val">{annualPremiumLabel}</span></div>
           {(scheme === 'PMJJBY' || scheme === 'PMSBY') && premiumLoading && (
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>Loading premium details…</p>
           )}
-          {premiumDetails && (
-            <>
-              <div className="divider" />
-              <div className="summary-row"><span className="summary-key">Total Premium Amount</span><span className="summary-val">₹{premiumDetails.totalPremium.toLocaleString('en-IN')}</span></div>
-              <div className="summary-row"><span className="summary-key">First Premium Amount (Pro Rata)</span><span className="summary-val">₹{premiumDetails.firstPremium.toLocaleString('en-IN')}</span></div>
-              <div className="summary-row"><span className="summary-key">Next Premium Debit Window</span><span className="summary-val">{premiumDetails.nextDebitWindow}</span></div>
-            </>
+          {premiumDetails && (scheme === 'PMJJBY' || scheme === 'PMSBY') && (
+            <div className="summary-row">
+              <span className="summary-key">First Premium Amount (Pro Rata)</span>
+              <span className="summary-val">₹{premiumDetails.firstPremium.toLocaleString('en-IN')}</span>
+            </div>
           )}
         </div>
 
@@ -217,10 +233,10 @@ export default function PMSocial() {
             <div className="radio-group">
               {accountsLoading && <p className="form-hint">Loading accounts…</p>}
               {accounts.map(a => (
-                <label key={a.value} className={`radio-option ${savingAccount === a.value ? 'selected' : ''}`}>
+                <label key={a.value} className={`radio-option account-radio-option ${savingAccount === a.value ? 'selected' : ''}`}>
                   <input type="radio" name="account" checked={savingAccount === a.value}
                     onChange={() => { setSavingAccount(a.value); setFormErrors(e => ({ ...e, savingAccount: '' })); }} />
-                  <span className="radio-label">{a.label}</span>
+                  <AccountDisplay account={a} />
                 </label>
               ))}
             </div>
@@ -289,14 +305,14 @@ export default function PMSocial() {
           {nomineeSource === 'existing' && (
             <div className="info-box" style={{ marginTop: 4 }}>
               <span className="info-icon">ℹ️</span>
-              <span>The nominee already registered with account {acc?.label} will be used for this scheme.</span>
+              <span>The nominee already registered with account <AccountDisplay account={acc} /> will be used for this scheme.</span>
             </div>
           )}
 
           {(scheme === 'PMJJBY' || scheme === 'PMSBY') && (
             <div className="form-group">
               <label className="form-label">Area Type <span className="required">*</span></label>
-              <div className="radio-group horizontal">
+              <div className="radio-group horizontal area-type-options">
                 {(['Rural', 'Urban'] as const).map(option => (
                   <label key={option} className={`radio-option ${ruralOrUrban === option ? 'selected' : ''}`}>
                     <input
@@ -339,14 +355,13 @@ export default function PMSocial() {
             <span className={`scheme-badge scheme-${scheme}`} style={{ marginLeft: 'auto' }}>{scheme}</span>
           </div>
           <div className="summary-row"><span className="summary-key">Scheme</span><span className="summary-val">{SCHEME_INFO[scheme].name}</span></div>
-          <div className="summary-row"><span className="summary-key">Savings Account</span><span className="summary-val">{acc?.label}</span></div>
-          <div className="summary-row"><span className="summary-key">Annual Premium</span><span className="summary-val">{SCHEME_INFO[scheme].premium}</span></div>
-          {premiumDetails && (
-            <>
-              <div className="summary-row"><span className="summary-key">Total Premium Amount</span><span className="summary-val">₹{premiumDetails.totalPremium.toLocaleString('en-IN')}</span></div>
-              <div className="summary-row"><span className="summary-key">First Premium Amount (Pro Rata)</span><span className="summary-val">₹{premiumDetails.firstPremium.toLocaleString('en-IN')}</span></div>
-              <div className="summary-row"><span className="summary-key">Next Premium Debit Window</span><span className="summary-val">{premiumDetails.nextDebitWindow}</span></div>
-            </>
+          <div className="summary-row"><span className="summary-key">Debit Account</span><span className="summary-val"><AccountDisplay account={acc} /></span></div>
+          <div className="summary-row"><span className="summary-key">Annual Premium</span><span className="summary-val">{annualPremiumLabel}</span></div>
+          {premiumDetails && (scheme === 'PMJJBY' || scheme === 'PMSBY') && (
+            <div className="summary-row">
+              <span className="summary-key">First Premium Amount (Pro Rata)</span>
+              <span className="summary-val">₹{premiumDetails.firstPremium.toLocaleString('en-IN')}</span>
+            </div>
           )}
           {scheme === 'PMAPY' && <>
             <div className="summary-row"><span className="summary-key">Pension Amount</span><span className="summary-val">₹{Number(pensionAmount).toLocaleString('en-IN')} / month</span></div>
@@ -372,6 +387,10 @@ export default function PMSocial() {
             {loading ? 'Sending OTP…' : 'Confirm & Get OTP →'}
           </button>
         </div>
+        {apiError && <p className="form-error" style={{ marginTop: 12 }}>⚠ {apiError}</p>}
+        <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
+          Cancel
+        </button>
       </Actions>
     </>
   );
@@ -390,6 +409,7 @@ export default function PMSocial() {
       </div>
       <Actions>
         <button className="btn btn-secondary" onClick={() => setStep('confirm')}>← Back</button>
+        <button type="button" className="btn btn-secondary" onClick={resetToServiceHome}>Cancel</button>
       </Actions>
     </>
   );

@@ -100,3 +100,18 @@ export function toAutoRenewalFlag(renewal: RenewalRequired): 'Y' | 'N' {
 export function isPeriodicInterestPayMode(mode: string): boolean {
   return ['Monthly', 'Quarterly', 'Half Yearly', 'Yearly'].includes(mode);
 }
+
+export function getInterestEarnedLabel(mode: string): string {
+  switch (mode) {
+    case 'Monthly':
+      return 'Monthly Interest';
+    case 'Quarterly':
+      return 'Quarterly Interest';
+    case 'Half Yearly':
+      return 'Half Yearly Interest';
+    case 'Yearly':
+      return 'Yearly Interest';
+    default:
+      return 'Interest Earned';
+  }
+}
