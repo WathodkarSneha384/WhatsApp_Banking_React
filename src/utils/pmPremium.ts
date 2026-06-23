@@ -49,7 +49,7 @@ export async function getPmapyInstallmentAmount(
   accountNumber: string,
   pensionAmount: number,
   frequency: PmapyInstallmentFrequency | '',
-): Promise<number | null> {
+) {
   if (!accountNumber || !pensionAmount || !frequency) {
     return null;
   }
@@ -68,20 +68,19 @@ export async function getPmapyInstallmentAmount(
   }
 
   try {
-    const response = await getAPYPreInsAmount({
-      Debitaccountnon: accountNumber,
+    return await getAPYPreInsAmount({
+      debitAccountNo: accountNumber,
       insuranceType: 'APY',
       pensionamount: pensionAmount.toString(),
       insatllmentFreq: frequencyCode,
     });
-
-    if (response.errorCode === '00') {
-      return Number(response.insurancePremiumAmount);
-    }
-
-    return null;
   } catch (error) {
-    console.error('Failed to fetch installment amount', error);
-    return null;
-  }
+  return {
+    errorCode: '425',
+    status: '02',
+    errorMsg: error instanceof Error
+      ? error.message
+      : 'Failed to fetch installment amount',
+  };
+}
 }

@@ -88,6 +88,9 @@ export default function PMSocial() {
   const { premium: premiumDetails, loading: premiumLoading } = useInsurancePremium(insuranceScheme);
   const { relations } = useRelations('pmyrelation');
   const [installmentAmount, setInstallmentAmount] = useState<number | null>(null);
+  const [apyMessage, setApyMessage] = useState('');
+  const [apyEligible, setApyEligible] = useState(true);
+
 
   useEffect(() => {
     const fetchInstallmentAmount = async () => {
@@ -96,13 +99,24 @@ export default function PMSocial() {
         return;
       }
 
-      const amount = await getPmapyInstallmentAmount(
+      const response = await getPmapyInstallmentAmount(
         savingAccount,
         Number(pensionAmount),
         installmentFreq as PmapyInstallmentFrequency,
       );
 
-      setInstallmentAmount(amount);
+      if (!response) return;
+
+      if (response.errorCode !== '00') {
+        setApyEligible(false);
+        setInstallmentAmount(null);
+        setApyMessage(response.errorMsg);
+        return;
+      }
+
+      setApyEligible(true);
+      setApyMessage(response.errorMsg || '');
+      setInstallmentAmount(Number(response.insurancePremiumAmount));
     };
 
     fetchInstallmentAmount();
@@ -176,62 +190,62 @@ export default function PMSocial() {
   const handleOtpComplete = async (otp: string) => {
     setApiError('');
     if (scheme === 'PMAPY') {
-  try {
-    await validateOtp(customer.mobileNo, otp, 'PMYSCHEMEOTP');
+      try {
+        await validateOtp(customer.mobileNo, otp, 'PMYSCHEMEOTP');
 
-    const result = await doProcessAPYPolicy({
-      bank: '068',
-      customerId: customer.customerId,
-      debitAccountNumber: savingAccount,
-      insuranceCompany: 'APY',
-      pensionAmount: pensionAmount,
-      installmentFreq:
-        installmentFreq === 'Monthly'
-          ? 'M'
-          : installmentFreq === 'Quarterly'
-          ? 'Q'
-          : 'H',
-      installmentAmt: String(installmentAmount ?? ''),
-      nomineeName: nominee.nomineeName,
-      nomineedob: nominee.nomineeDob,
-      nomineeRelCode: nominee.relation,
-      nomineeAdharno: '',
-      spouseName:  '',
-      spouseAdharno: '',
-      guardinName: nomineeIsMinor ? nominee.guardianName : '',
-      reltwithMinor: nomineeIsMinor
-        ? nominee.guardianRelation
-        : '',
-      providentFund: '',
-    });
+        const result = await doProcessAPYPolicy({
+          bank: '068',
+          customerId: customer.customerId,
+          debitAccountNumber: savingAccount,
+          insuranceCompany: 'APY',
+          pensionAmount: pensionAmount,
+          installmentFreq:
+            installmentFreq === 'Monthly'
+              ? 'M'
+              : installmentFreq === 'Quarterly'
+                ? 'Q'
+                : 'H',
+          installmentAmt: String(installmentAmount ?? ''),
+          nomineeName: nominee.nomineeName,
+          nomineedob: nominee.nomineeDob,
+          nomineeRelCode: nominee.relation,
+          nomineeAdharno: '',
+          spouseName: '',
+          spouseAdharno: '',
+          guardinName: nomineeIsMinor ? nominee.guardianName : '',
+          reltwithMinor: nomineeIsMinor
+            ? nominee.guardianRelation
+            : '',
+          providentFund: '',
+        });
 
-    setOperationResult({
-      status: 'success',
-      title: 'Enrollment Successful!',
-      message: `You've been enrolled in ${scheme}. The premium will be auto-debited from ${acc?.label ?? 'your account'}${acc?.branchName ? ` (${acc.branchName})` : ''} as per schedule.`,
-      refNo: result.prannumber,
-    });
+        setOperationResult({
+          status: 'success',
+          title: 'Enrollment Successful!',
+          message: `You've been enrolled in ${scheme}. The premium will be auto-debited from ${acc?.label ?? 'your account'}${acc?.branchName ? ` (${acc.branchName})` : ''} as per schedule.`,
+          refNo: result.prannumber,
+        });
 
-    setStep('result');
-    return;
-  } catch (err) {
-    const message =
-      err instanceof Error
-        ? err.message
-        : 'Enrollment failed';
+        setStep('result');
+        return;
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'Enrollment failed';
 
-    setApiError(message);
+        setApiError(message);
 
-    setOperationResult({
-      status: 'error',
-      title: 'Enrollment Failed',
-      message,
-    });
+        setOperationResult({
+          status: 'error',
+          title: 'Enrollment Failed',
+          message,
+        });
 
-    setStep('result');
-    return;
-  }
-}
+        setStep('result');
+        return;
+      }
+    }
 
     setLoading(true);
     try {
@@ -378,6 +392,17 @@ export default function PMSocial() {
                   value={installmentAmount != null ? `₹${installmentAmount}` : ''}
                   placeholder="Select pension amount and frequency"
                 />
+
+                {apyMessage && (
+                  <p
+                    className={
+                      apyEligible ? 'form-success' : 'form-error'
+                    }
+                    style={{ marginTop: 6 }}
+                  >
+                    {apyMessage}
+                  </p>
+                )}
               </div>
             </>
           )}
@@ -417,7 +442,15 @@ export default function PMSocial() {
         </div>
       </div>
       <Actions>
-        <button className="btn btn-primary" onClick={() => { if (validateForm()) setStep('confirm'); }}>
+        <button
+          className="btn btn-primary"
+          disabled={!apyEligible}
+          onClick={() => {
+            if (validateForm() && apyEligible) {
+              setStep('confirm');
+            }
+          }}
+        >
           Review →
         </button>
       </Actions>

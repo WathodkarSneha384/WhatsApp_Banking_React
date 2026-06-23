@@ -885,13 +885,13 @@ export async function doProcessAPYPolicy(input: {
 }
 
 export async function getAPYPreInsAmount(input: {
-  Debitaccountnon: string;
+  debitAccountNo: string;
   insuranceType: string;
   pensionamount: string;
   insatllmentFreq: 'M' | 'Q' | 'H';
 }): Promise<any> {
   const {
-    Debitaccountnon,
+    debitAccountNo,
     insuranceType,
     pensionamount,
     insatllmentFreq,
@@ -905,9 +905,8 @@ export async function getAPYPreInsAmount(input: {
     'getAPYpreinsamount',
     USERNAME,
     PASSWORD,
-    Debitaccountnon,
     insuranceType,
-    pensionamount,
+    debitAccountNo,
   );
 
   const response = await postEndpoint(
@@ -915,7 +914,7 @@ export async function getAPYPreInsAmount(input: {
     {
       ...basePayload('getAPYpreinsamount', checkSum),
       timeStamp,
-      Debitaccountnon,
+      debitAccountNo,
       insuranceType,
       pensionamount,
       insatllmentFreq,

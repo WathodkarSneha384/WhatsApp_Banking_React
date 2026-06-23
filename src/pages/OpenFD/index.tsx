@@ -120,19 +120,39 @@ export default function OpenFD() {
   const [apiError, setApiError] = useState('');
   const otpCountdown = useOtpCountdown(step === 'otp');
   const nomineeIsMinor = nominee.nomineeDob ? (calcAge(nominee.nomineeDob) ?? 18) < 18 : false;
+  const canCalculateMaturity =
+  !!form.depositAmount &&
+  !!form.depositType &&
+  !!form.renewalRequired &&
+  !!form.interestPayMode &&
+  !!form.periodType &&
+  !!form.depositPeriod;
 
-  const {
-    maturityData,
-    loading: maturityLoading,
-  } = useCalculateMaturity(
-    form.depositAmount,
-    form.depositType === 'Simple' ? '001' : '002',
-    form.periodType === 'Months' ? form.depositPeriod : '0',
-    form.periodType === 'Days' ? form.depositPeriod : '0',
-    form.periodType as 'Days' | 'Months' | '',
-    form.depositType as 'Simple' | 'Compound' | '',
-    toInterestPayModeApiCode(form.interestPayMode),
-  );
+const {
+  maturityData,
+  loading: maturityLoading,
+} = useCalculateMaturity(
+  canCalculateMaturity ? form.depositAmount : '',
+  canCalculateMaturity
+    ? (form.depositType === 'Simple' ? '001' : '002')
+    : '',
+  canCalculateMaturity && form.periodType === 'Months'
+    ? form.depositPeriod
+    : '0',
+  canCalculateMaturity && form.periodType === 'Days'
+    ? form.depositPeriod
+    : '0',
+  canCalculateMaturity
+    ? (form.periodType as 'Days' | 'Months')
+    : '',
+  canCalculateMaturity
+    ? (form.depositType as 'Simple' | 'Compound')
+    : '',
+  canCalculateMaturity
+    ? toInterestPayModeApiCode(form.interestPayMode)
+    : '',
+  form.renewalRequired // new parameter
+);
   console.log('Deposite Type===', form.depositType, 'Period Type===', form.periodType, 'Deposit Period===', form.depositPeriod, 'Interest Pay Mode===', form.interestPayMode);
   const fetchExistingNominee = async (accountNumber: string) => {
     if (!accountNumber) {
