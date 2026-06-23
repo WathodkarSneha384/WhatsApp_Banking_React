@@ -110,7 +110,6 @@ export default function OpenFD() {
   const [nomineeErrors, setNomineeErrors] = useState<NomineeFieldErrors>({});
   const [loading, setLoading] = useState(false);
   const [refNo] = useState(() => 'FD' + Date.now().toString().slice(-8));
-  const [fdAccNo, setFdAccNo] = useState(() => 'FD' + Math.floor(Math.random() * 9000000 + 1000000));
   const [operationResult, setOperationResult] = useState<OperationResult | null>(null);
   const resetToServiceHome = useServiceFlowReset('openfd');
 
@@ -327,12 +326,6 @@ const {
         guardianDateOfBirth: nomineeIsMinor ? nominee.guardianDob : '',
         guardianRelation: nomineeIsMinor ? nominee.guardianRelation : '',
       });
-
-      console.log('FD Open Response', response);
-      //  refNo: response.depositAccountNumber || 'N/A',
-      // Optional:
-      //setFdAccNo(String(response?.depositAccountNumber));
-      console.log('FD Account Number', fdAccNo);
 
       setOperationResult({
         status: 'success',

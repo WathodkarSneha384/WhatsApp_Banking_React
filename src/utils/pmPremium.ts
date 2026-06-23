@@ -40,9 +40,6 @@ export const PENSION_AMOUNT_OPTIONS = [1000, 2000, 3000, 4000, 5000].map(v => ({
   label: `₹${v.toLocaleString('en-IN')} / month`,
 }));
 
-/** Indicative monthly APY contribution per ₹1,000/month pension (scaled by amount). */
-const PMAPY_MONTHLY_CONTRIBUTION_PER_1000 = 42;
-
 export type PmapyInstallmentFrequency = 'Monthly' | 'Quarterly' | 'Half Yearly';
 
 export async function getPmapyInstallmentAmount(
