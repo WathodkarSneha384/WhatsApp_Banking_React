@@ -205,7 +205,7 @@ export default function Nominee() {
         variant={operationResult.status}
         title={operationResult.title}
         message={operationResult.message}
-        refNo={operationResult.refNo}
+        
         onCancel={resetToServiceHome}
       />
     );
