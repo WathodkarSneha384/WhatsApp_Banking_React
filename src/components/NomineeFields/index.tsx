@@ -155,7 +155,7 @@ export default function NomineeFields({
 
           {showGuardianDob && (
             <div className="form-group">
-              <label className="form-label">Guardian Date of Birth (DD-MM-YYYY) <span className="required">*</span></label>
+              <label className="form-label">Guardian Date of Birth <span className="required">*</span></label>
               <input
                 id={`${fieldIdPrefix}-guardianDob`}
                 className={`form-input ${errors.guardianDob ? 'is-error' : ''}`}

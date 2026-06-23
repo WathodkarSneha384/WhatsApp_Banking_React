@@ -731,7 +731,7 @@ export function calculateMaturity(
       schemeCode,
       months,
       days,
-      interestPayMode ,
+      interestPayMode,
     ),
     5 * 60 * 1000,
   );
@@ -753,6 +753,13 @@ export async function openFDAccount(input: {
   nomineeRequired: 'Y' | 'N';
   nomineeAsdebitAccount: 'Y' | 'N';
   nomineeisMinor: 'Y' | 'N';
+  nomineeName?: string;
+  nomineeDateOfBirth?: string;
+  nomineeRelation?: string;
+
+  guardianName?: string;
+  guardianDateOfBirth?: string;
+  guardianRelation?: string;
 }) {
   const timeStamp = generateTimestamp();
 
@@ -790,5 +797,130 @@ export async function openFDAccount(input: {
     nomineeRequired: input.nomineeRequired,
     nomineeAsdebitAccount: input.nomineeAsdebitAccount,
     nomineeisMinor: input.nomineeisMinor,
+
+    nomineeName: input.nomineeName,
+    nomineeDateOfBirth: input.nomineeDateOfBirth,
+    nomineeRelation: input.nomineeRelation,
+
+    guardianName: input.guardianName,
+    guardianDateOfBirth: input.guardianDateOfBirth,
+    guardianRelation: input.guardianRelation,
   });
+}
+
+export async function doProcessAPYPolicy(input: {
+  bank: string;
+  customerId: string;
+  debitAccountNumber: string;
+  insuranceCompany: string;
+  pensionAmount: string;
+  installmentFreq: string;
+  installmentAmt: string;
+  nomineeName: string;
+  nomineedob: string;
+  nomineeRelCode: string;
+  nomineeAdharno?: string;
+  spouseName?: string;
+  spouseAdharno?: string;
+  guardinName?: string;
+  reltwithMinor?: string;
+  providentFund?: string;
+}): Promise<any> {
+  const {
+    bank,
+    customerId,
+    debitAccountNumber,
+    insuranceCompany,
+    pensionAmount,
+    installmentFreq,
+    installmentAmt,
+    nomineeName,
+    nomineedob,
+    nomineeRelCode,
+    nomineeAdharno = '',
+    spouseName = '',
+    spouseAdharno = '',
+    guardinName = '',
+    reltwithMinor = '',
+    providentFund = '',
+  } = input;
+
+  const timeStamp = generateTimestamp();
+
+  const checkSum = generateChecksum(
+    SECRET_KEY,
+    VENDOR,
+    'doProcessAPYPolicy',
+    USERNAME,
+    PASSWORD,
+    debitAccountNumber,
+    customerId,
+  );
+
+  const response = await postEndpoint(
+    'doProcessAPYPolicy',
+    {
+      ...basePayload('doProcessAPYPolicy', checkSum),
+      timeStamp,
+      bank,
+      customerId,
+      debitAccountNumber,
+      insuranceCompany,
+      pensionAmount,
+      installmentFreq,
+      installmentAmt,
+      nomineeName,
+      nomineedob,
+      nomineeRelCode,
+      nomineeAdharno,
+      spouseName,
+      spouseAdharno,
+      guardinName,
+      reltwithMinor,
+      providentFund,
+    }
+  );
+
+  return response;
+}
+
+export async function getAPYPreInsAmount(input: {
+  Debitaccountnon: string;
+  insuranceType: string;
+  pensionamount: string;
+  insatllmentFreq: 'M' | 'Q' | 'H';
+}): Promise<any> {
+  const {
+    Debitaccountnon,
+    insuranceType,
+    pensionamount,
+    insatllmentFreq,
+  } = input;
+
+  const timeStamp = generateTimestamp();
+
+  const checkSum = generateChecksum(
+    SECRET_KEY,
+    VENDOR,
+    'getAPYpreinsamount',
+    USERNAME,
+    PASSWORD,
+    Debitaccountnon,
+    insuranceType,
+    pensionamount,
+  );
+
+  const response = await postEndpoint(
+    'getAPYpreinsamount',
+    {
+      ...basePayload('getAPYpreinsamount', checkSum),
+      timeStamp,
+      Debitaccountnon,
+      insuranceType,
+      pensionamount,
+      insatllmentFreq,
+    }
+  );
+
+  return response;
 }

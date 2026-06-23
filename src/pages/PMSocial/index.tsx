@@ -15,7 +15,7 @@ import ServiceResultScreen from '../../components/ServiceResultScreen';
 import { useServiceFlowReset } from '../../hooks/useServiceFlowReset';
 import { useInsurancePremium } from '../../hooks/useInsurancePremium';
 import type { PMSocialSubservice } from '../../types';
-import { doProcessPMJJBYSBY, sendOtp, validateOtp } from '../../services/api';
+import { doProcessAPYPolicy, doProcessPMJJBYSBY, sendOtp, validateOtp } from '../../services/api';
 import AccountDisplay from '../../components/AccountDisplay';
 import { formatDDMMYYYY } from '../../utils/date';
 import {
@@ -62,6 +62,7 @@ const SCHEME_INFO: Record<PMSocialSubservice, { name: string; desc: string; prem
 
 const INSTALLMENT_FREQ = ['Monthly', 'Quarterly', 'Half Yearly'];
 
+
 const EMPTY_NOMINEE: NomineeFieldValues = {
   nomineeName: '', nomineeDob: '', relation: '',
   guardianName: '', guardianDob: '', guardianRelation: '',
@@ -86,14 +87,26 @@ export default function PMSocial() {
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
   const { premium: premiumDetails, loading: premiumLoading } = useInsurancePremium(insuranceScheme);
   const { relations } = useRelations('pmyrelation');
+  const [installmentAmount, setInstallmentAmount] = useState<number | null>(null);
 
-  const installmentAmount = useMemo(
-    () => getPmapyInstallmentAmount(
-      Number(pensionAmount),
-      installmentFreq as PmapyInstallmentFrequency,
-    ),
-    [pensionAmount, installmentFreq],
-  );
+  useEffect(() => {
+    const fetchInstallmentAmount = async () => {
+      if (!savingAccount || !pensionAmount || !installmentFreq) {
+        setInstallmentAmount(null);
+        return;
+      }
+
+      const amount = await getPmapyInstallmentAmount(
+        savingAccount,
+        Number(pensionAmount),
+        installmentFreq as PmapyInstallmentFrequency,
+      );
+
+      setInstallmentAmount(amount);
+    };
+
+    fetchInstallmentAmount();
+  }, [savingAccount, pensionAmount, installmentFreq]);
 
   useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step, setCurrentStep]);
 
@@ -163,16 +176,62 @@ export default function PMSocial() {
   const handleOtpComplete = async (otp: string) => {
     setApiError('');
     if (scheme === 'PMAPY') {
-      const generatedRef = 'PMS' + Date.now().toString().slice(-8);
-      setOperationResult({
-        status: 'success',
-        title: 'Enrollment Successful!',
-        message: `You've been enrolled in ${scheme}. The premium will be auto-debited from ${acc?.label ?? 'your account'}${acc?.branchName ? ` (${acc.branchName})` : ''} as per schedule.`,
-        refNo: generatedRef,
-      });
-      setStep('result');
-      return;
-    }
+  try {
+    await validateOtp(customer.mobileNo, otp, 'PMYSCHEMEOTP');
+
+    const result = await doProcessAPYPolicy({
+      bank: '068',
+      customerId: customer.customerId,
+      debitAccountNumber: savingAccount,
+      insuranceCompany: 'APY',
+      pensionAmount: pensionAmount,
+      installmentFreq:
+        installmentFreq === 'Monthly'
+          ? 'M'
+          : installmentFreq === 'Quarterly'
+          ? 'Q'
+          : 'H',
+      installmentAmt: String(installmentAmount ?? ''),
+      nomineeName: nominee.nomineeName,
+      nomineedob: nominee.nomineeDob,
+      nomineeRelCode: nominee.relation,
+      nomineeAdharno: '',
+      spouseName:  '',
+      spouseAdharno: '',
+      guardinName: nomineeIsMinor ? nominee.guardianName : '',
+      reltwithMinor: nomineeIsMinor
+        ? nominee.guardianRelation
+        : '',
+      providentFund: '',
+    });
+
+    setOperationResult({
+      status: 'success',
+      title: 'Enrollment Successful!',
+      message: `You've been enrolled in ${scheme}. The premium will be auto-debited from ${acc?.label ?? 'your account'}${acc?.branchName ? ` (${acc.branchName})` : ''} as per schedule.`,
+      refNo: result.prannumber,
+    });
+
+    setStep('result');
+    return;
+  } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : 'Enrollment failed';
+
+    setApiError(message);
+
+    setOperationResult({
+      status: 'error',
+      title: 'Enrollment Failed',
+      message,
+    });
+
+    setStep('result');
+    return;
+  }
+}
 
     setLoading(true);
     try {
@@ -231,23 +290,40 @@ export default function PMSocial() {
   if (step === 'form') return (
     <>
       <div className="flow-content">
-        <div className="card" style={{ borderColor: '#c5d6f5', background: '#f0f4fb' }}>
-          <div className="card-title" style={{ fontSize: 13 }}>
-            <span className="card-icon">📋</span>Scheme Details
-            <span className={`scheme-badge scheme-${scheme}`} style={{ marginLeft: 'auto' }}>{scheme}</span>
-          </div>
-          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', marginBottom: 10 }}>{SCHEME_INFO[scheme].name}</p>
-          <div className="summary-row"><span className="summary-key">Annual Premium</span><span className="summary-val">{annualPremiumLabel}</span></div>
-          {(scheme === 'PMJJBY' || scheme === 'PMSBY') && premiumLoading && (
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>Loading premium details…</p>
-          )}
-          {premiumDetails && (scheme === 'PMJJBY' || scheme === 'PMSBY') && (
-            <div className="summary-row">
-              <span className="summary-key">First Premium Amount (Pro Rata)</span>
-              <span className="summary-val">₹{premiumDetails.firstPremium.toLocaleString('en-IN')}</span>
+        {(scheme === 'PMJJBY' || scheme === 'PMSBY') && (
+          <div className="card" style={{ borderColor: '#c5d6f5', background: '#f0f4fb' }}>
+            <div className="card-title" style={{ fontSize: 13 }}>
+              <span className="card-icon">📋</span>Scheme Details
+              <span className={`scheme-badge scheme-${scheme}`} style={{ marginLeft: 'auto' }}>
+                {scheme}
+              </span>
             </div>
-          )}
-        </div>
+
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', marginBottom: 10 }}>
+              {SCHEME_INFO[scheme].name}
+            </p>
+
+            <div className="summary-row">
+              <span className="summary-key">Annual Premium</span>
+              <span className="summary-val">{annualPremiumLabel}</span>
+            </div>
+
+            {premiumLoading && (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                Loading premium details…
+              </p>
+            )}
+
+            {premiumDetails && (
+              <div className="summary-row">
+                <span className="summary-key">First Premium Amount (Pro Rata)</span>
+                <span className="summary-val">
+                  ₹{premiumDetails.firstPremium.toLocaleString('en-IN')}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="card">
           <div className="card-title">
@@ -299,7 +375,7 @@ export default function PMSocial() {
                   type="text"
                   className="form-input"
                   readOnly
-                  value={installmentAmount != null ? `₹${installmentAmount.toLocaleString('en-IN')}` : ''}
+                  value={installmentAmount != null ? `₹${installmentAmount}` : ''}
                   placeholder="Select pension amount and frequency"
                 />
               </div>
@@ -376,7 +452,7 @@ export default function PMSocial() {
               <div className="summary-row"><span className="summary-key">Pension Amount</span><span className="summary-val">₹{Number(pensionAmount).toLocaleString('en-IN')} / month</span></div>
               <div className="summary-row"><span className="summary-key">Installment Frequency</span><span className="summary-val">{installmentFreq}</span></div>
               {installmentAmount != null && (
-                <div className="summary-row"><span className="summary-key">Installment Amount</span><span className="summary-val">₹{installmentAmount.toLocaleString('en-IN')}</span></div>
+                <div className="summary-row"><span className="summary-key">Installment Amount</span><span className="summary-val">₹{installmentAmount}</span></div>
               )}
             </>
           )}

@@ -1,3 +1,4 @@
+import { getAPYPreInsAmount } from '../services/bankingApi';
 import type { PMSocialSubservice } from '../types';
 
 export interface InsurancePremiumDetails {
@@ -44,21 +45,43 @@ const PMAPY_MONTHLY_CONTRIBUTION_PER_1000 = 42;
 
 export type PmapyInstallmentFrequency = 'Monthly' | 'Quarterly' | 'Half Yearly';
 
-export function getPmapyInstallmentAmount(
+export async function getPmapyInstallmentAmount(
+  accountNumber: string,
   pensionAmount: number,
   frequency: PmapyInstallmentFrequency | '',
-): number | null {
-  if (!pensionAmount || !frequency) return null;
+): Promise<number | null> {
+  if (!accountNumber || !pensionAmount || !frequency) {
+    return null;
+  }
 
-  const monthly = Math.round((pensionAmount / 1000) * PMAPY_MONTHLY_CONTRIBUTION_PER_1000);
-  switch (frequency) {
-    case 'Monthly':
-      return monthly;
-    case 'Quarterly':
-      return monthly * 3;
-    case 'Half Yearly':
-      return monthly * 6;
-    default:
-      return null;
+  const frequencyCode =
+    frequency === 'Monthly'
+      ? 'M'
+      : frequency === 'Quarterly'
+      ? 'Q'
+      : frequency === 'Half Yearly'
+      ? 'H'
+      : '';
+
+  if (!frequencyCode) {
+    return null;
+  }
+
+  try {
+    const response = await getAPYPreInsAmount({
+      Debitaccountnon: accountNumber,
+      insuranceType: 'APY',
+      pensionamount: pensionAmount.toString(),
+      insatllmentFreq: frequencyCode,
+    });
+
+    if (response.errorCode === '00') {
+      return Number(response.insurancePremiumAmount);
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Failed to fetch installment amount', error);
+    return null;
   }
 }

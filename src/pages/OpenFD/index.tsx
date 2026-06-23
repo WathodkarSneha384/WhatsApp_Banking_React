@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import OTPInput from '../../components/OTPInput';
 import Select from '../../components/Select';
 import { Actions } from '../../components/ServiceShell';
-import NomineeFields, { type NomineeFieldValues, type NomineeFieldErrors, validateNomineeFields } from '../../components/NomineeFields';
+import NomineeFields, { type NomineeFieldValues, type NomineeFieldErrors, validateNomineeFields, calcAge } from '../../components/NomineeFields';
 import { useFlow } from '../../context/FlowContext';
 import { useAccounts } from '../../hooks/useAccounts';
 import ServiceResultScreen from '../../components/ServiceResultScreen';
@@ -24,6 +24,8 @@ import { useOtpCountdown } from '../../hooks/useOtpCountdown';
 import { formatDDMMYYYY } from '../../utils/date';
 import AccountDisplay from '../../components/AccountDisplay';
 import { openFDAccount, sendOtp, validateOtp, verifyExistingNominees } from '../../services/bankingApi';
+import { relationLabel } from '../../utils/relationLabel';
+import { useRelations } from '../../hooks/useRelations';
 
 type NomineeSource = 'existing' | 'new' | 'no';
 type Step = 'form' | 'confirm' | 'otp' | 'result';
@@ -108,7 +110,7 @@ export default function OpenFD() {
   const [nomineeErrors, setNomineeErrors] = useState<NomineeFieldErrors>({});
   const [loading, setLoading] = useState(false);
   const [refNo] = useState(() => 'FD' + Date.now().toString().slice(-8));
-  const [fdAccNo] = useState(() => 'FD' + Math.floor(Math.random() * 9000000 + 1000000));
+  const [fdAccNo, setFdAccNo] = useState(() => 'FD' + Math.floor(Math.random() * 9000000 + 1000000));
   const [operationResult, setOperationResult] = useState<OperationResult | null>(null);
   const resetToServiceHome = useServiceFlowReset('openfd');
 
@@ -117,20 +119,21 @@ export default function OpenFD() {
   const [nomineeLoading, setNomineeLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const otpCountdown = useOtpCountdown(step === 'otp');
+  const nomineeIsMinor = nominee.nomineeDob ? (calcAge(nominee.nomineeDob) ?? 18) < 18 : false;
 
   const {
     maturityData,
     loading: maturityLoading,
   } = useCalculateMaturity(
     form.depositAmount,
-    form.depositType==='Simple'?'001':'002',
+    form.depositType === 'Simple' ? '001' : '002',
     form.periodType === 'Months' ? form.depositPeriod : '0',
     form.periodType === 'Days' ? form.depositPeriod : '0',
     form.periodType as 'Days' | 'Months' | '',
     form.depositType as 'Simple' | 'Compound' | '',
     toInterestPayModeApiCode(form.interestPayMode),
   );
-  console.log('Deposite Type===',form.depositType,'Period Type===',form.periodType,'Deposit Period===',form.depositPeriod,'Interest Pay Mode===',form.interestPayMode);
+  console.log('Deposite Type===', form.depositType, 'Period Type===', form.periodType, 'Deposit Period===', form.depositPeriod, 'Interest Pay Mode===', form.interestPayMode);
   const fetchExistingNominee = async (accountNumber: string) => {
     if (!accountNumber) {
       setExistingNominee(null);
@@ -295,18 +298,27 @@ export default function OpenFD() {
             : 'N',
 
         nomineeisMinor: 'N',
+
+        nomineeName: nominee.nomineeName,
+        nomineeDateOfBirth: nominee.nomineeDob,
+        nomineeRelation: nominee.relation,
+
+        guardianName: nomineeIsMinor ? nominee.guardianName : '',
+        guardianDateOfBirth: nomineeIsMinor ? nominee.guardianDob : '',
+        guardianRelation: nomineeIsMinor ? nominee.guardianRelation : '',
       });
 
       console.log('FD Open Response', response);
-
+      //  refNo: response.depositAccountNumber || 'N/A',
       // Optional:
-      // setFdAccNo(response.fdAccountNo);
+      //setFdAccNo(String(response?.depositAccountNumber));
+      console.log('FD Account Number', fdAccNo);
 
       setOperationResult({
         status: 'success',
         title: 'FD Opened Successfully!',
         message: 'Your Fixed Deposit has been opened. A confirmation will be sent to your registered mobile number.',
-        refNo: fdAccNo,
+        refNo: String(response?.depositAccountNumber),
         refLabel: 'FD Account Number',
       });
       setStep('result');
@@ -390,6 +402,8 @@ export default function OpenFD() {
   );
 
   const interestEarnedLabel = getInterestEarnedLabel(form.interestPayMode);
+
+  const { relations } = useRelations('pmyrelation');
 
   if (step === 'result' && operationResult) {
     return (
@@ -687,8 +701,17 @@ export default function OpenFD() {
         {form.nomineeSource === 'new' && <>
           <div className="summary-row"><span className="summary-key">Nominee Name</span><span className="summary-val">{nominee.nomineeName}</span></div>
           <div className="summary-row"><span className="summary-key">Nominee DOB</span><span className="summary-val">{new Date(nominee.nomineeDob).toLocaleDateString('en-IN')}</span></div>
-          <div className="summary-row"><span className="summary-key">Relationship</span><span className="summary-val">{nominee.relation}</span></div>
+          <div className="summary-row"><span className="summary-key">Relationship</span><span className="summary-val">{relationLabel(relations, nominee.relation)}</span></div>
         </>}
+        {nomineeIsMinor && (
+          <>
+            <div className="divider" />
+            <div className="section-heading">Guardian Details</div>
+            <div className="summary-row"><span className="summary-key">Guardian Name</span><span className="summary-val">{nominee.guardianName}</span></div>
+            <div className="summary-row"><span className="summary-key">Guardian DOB</span><span className="summary-val">{formatDDMMYYYY(nominee.guardianDob)}</span></div>
+            <div className="summary-row"><span className="summary-key">Guardian Relation</span><span className="summary-val">{relationLabel(relations, nominee.guardianRelation)}</span></div>
+          </>
+        )}
       </div>
     </div>
       <Actions>
