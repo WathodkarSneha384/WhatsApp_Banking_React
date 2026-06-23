@@ -214,8 +214,8 @@ export default function PMSocial() {
           spouseAdharno: '',
           guardinName: nomineeIsMinor ? nominee.guardianName : '',
           reltwithMinor: nomineeIsMinor
-            ? nominee.guardianRelation
-            : '',
+            ? Number(nominee.guardianRelation)
+            : 0,
           providentFund: '',
         });
 

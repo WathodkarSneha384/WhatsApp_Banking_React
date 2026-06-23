@@ -809,21 +809,24 @@ export async function openFDAccount(input: {
 }
 
 export async function doProcessAPYPolicy(input: {
-  bank: string;
-  customerId: string;
-  debitAccountNumber: string;
+  bank:string;
   insuranceCompany: string;
+ customerId: string;
+  debitAccountNumber: string;
   pensionAmount: string;
   installmentFreq: string;
-  insurancePremiumAmount: Number;
+  insurancePremiumAmount: number;
+
   nomineeName: string;
   nomineedob: string;
   nomineeRelCode: string;
+
   nomineeAdharno?: string;
   spouseName?: string;
   spouseAdharno?: string;
+
   guardinName?: string;
-  reltwithMinor?: string;
+  reltwithMinor?: Number;
   providentFund?: string;
 }): Promise<any> {
   const {
@@ -841,7 +844,7 @@ export async function doProcessAPYPolicy(input: {
     spouseName = '',
     spouseAdharno = '',
     guardinName = '',
-    reltwithMinor = '',
+    reltwithMinor = 0,
     providentFund = '',
   } = input;
 
