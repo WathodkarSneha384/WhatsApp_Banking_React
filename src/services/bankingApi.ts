@@ -312,7 +312,10 @@ export async function fetchInsurancePremium(
       SECRET_KEY, VENDOR, 'getpreinsamount', USERNAME, PASSWORD, scheme
     );
 
-    const data = await postEndpoint<BankApiResponse & { insurancePremiumAmount?: string }>(
+    const data = await postEndpoint<BankApiResponse & {
+      totalAmount?: string | number;
+      insurancePremiumAmount?: string | number;
+    }>(
       'getpreinsamount',
       {
         ...basePayload('getpreinsamount', checkSum),
@@ -323,10 +326,11 @@ export async function fetchInsurancePremium(
       },
     );
 
-    const totalPremium = Number(data.insurancePremiumAmount ?? calculated.totalPremium);
+    const totalPremium = Number(data.totalAmount ?? calculated.totalPremium);
+    const firstPremium = Number(data.insurancePremiumAmount ?? calculated.firstPremium);
     return {
       totalPremium: Number.isFinite(totalPremium) ? totalPremium : calculated.totalPremium,
-      firstPremium: calculated.firstPremium,
+      firstPremium: Number.isFinite(firstPremium) ? firstPremium : calculated.firstPremium,
       nextDebitWindow: calculated.nextDebitWindow,
       source: 'api',
     };

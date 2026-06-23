@@ -42,6 +42,25 @@ export const PENSION_AMOUNT_OPTIONS = [1000, 2000, 3000, 4000, 5000].map(v => ({
 
 export type PmapyInstallmentFrequency = 'Monthly' | 'Quarterly' | 'Half Yearly';
 
+export interface PmSchemePremiumFromApi {
+  totalPremium: number;
+  firstPremium: number;
+}
+
+export function parsePmSchemePremiumFromApi(
+  data: { totalAmount?: string | number; insurancePremiumAmount?: string | number },
+  fallback?: { totalPremium: number; firstPremium: number },
+): PmSchemePremiumFromApi | null {
+  const totalPremium = Number(data.totalAmount);
+  const firstPremium = Number(data.insurancePremiumAmount);
+
+  if (!Number.isFinite(totalPremium) || !Number.isFinite(firstPremium)) {
+    return fallback ?? null;
+  }
+
+  return { totalPremium, firstPremium };
+}
+
 export async function getPmapyInstallmentAmount(
   accountNumber: string,
   pensionAmount: number,
