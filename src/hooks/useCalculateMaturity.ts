@@ -92,7 +92,7 @@ export function useCalculateMaturity(
       interestPayMode,
     });
 
-    calculateMaturity(amount, schemeCode, monthNum, dayNum)
+    calculateMaturity(amount, schemeCode, monthNum, dayNum,interestPayMode)
       .then((res) => {
         if (cancelled) return;
         const normalized = normalizeApiMaturity(res as Record<string, unknown>, {

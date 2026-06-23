@@ -670,6 +670,7 @@ export async function fetchCalculateMaturity(
   schemeCode: string,
   months: number,
   days: number,
+  interestPayMode: string,
 ) {
   const timeStamp = generateTimestamp();
   const amountStr = `${depositAmount}.0`;
@@ -701,6 +702,7 @@ export async function fetchCalculateMaturity(
       schemeCode,
       months,
       days,
+      interestPayMode,
     },
     false,
   );
@@ -718,6 +720,7 @@ export function calculateMaturity(
   schemeCode: string,
   months: number,
   days: number,
+  interestPayMode: string,
 ) {
   console.log('calculateMaturity called');
   return cachedFetch1(
@@ -728,6 +731,7 @@ export function calculateMaturity(
       schemeCode,
       months,
       days,
+      interestPayMode ,
     ),
     5 * 60 * 1000,
   );
@@ -768,7 +772,7 @@ export async function openFDAccount(input: {
 
     customerCode: input.customerCode,
     depositAmount: input.depositAmount,
-    schemeCode: input.depositType === 'Simple' ? '01' : '02',
+    schemeCode: input.depositType === 'Simple' ? '001' : '002',
 
     months: input.months,
     days: input.days,
