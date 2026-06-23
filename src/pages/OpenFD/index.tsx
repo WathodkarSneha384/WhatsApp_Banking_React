@@ -105,6 +105,11 @@ export default function OpenFD() {
     renewalRequired: '', interestPayMode: '', periodType: '', depositPeriod: '',
     nomineeSource: '',
   });
+  const accountNominee = {
+  nomineeName: '',
+  nomineeDob: '',
+  relation: 'SIS',
+};
   const [errors, setErrors] = useState<FDErrors>({});
   const [nominee, setNominee] = useState<NomineeFieldValues>(EMPTY_NOMINEE);
   const [nomineeErrors, setNomineeErrors] = useState<NomineeFieldErrors>({});
@@ -213,6 +218,23 @@ const {
   }, [existingNominee, form.nomineeSource]);
 
   useEffect(() => {
+  if (form.nomineeSource === 'existing' && accountNominee) {
+    setNominee({
+      nomineeName: accountNominee.nomineeName || '',
+      nomineeDob: accountNominee.nomineeDob || '',
+      relation: accountNominee.relation || '',
+      guardianName: '',
+      guardianDob: '',
+      guardianRelation: '',
+    });
+  }
+
+  if (form.nomineeSource === 'new') {
+    setNominee(EMPTY_NOMINEE);
+  }
+}, [form.nomineeSource, accountNominee]);
+
+  useEffect(() => {
     if (form.savingAccount) {
       fetchExistingNominee(form.savingAccount);
     } else {
@@ -318,9 +340,9 @@ const {
 
         nomineeisMinor: 'N',
 
-        nomineeName: nominee.nomineeName,
-        nomineeDateOfBirth: nominee.nomineeDob,
-        nomineeRelation: nominee.relation,
+        nomineeName: form.nomineeSource === 'existing'?existingNominee.nomineeName : nominee.nomineeName,
+        nomineeDateOfBirth: form.nomineeSource === 'existing'?existingNominee.nomineeDob : nominee.nomineeDob,
+        nomineeRelation: form.nomineeSource === 'existing'?existingNominee.relation : nominee.relation,
 
         guardianName: nomineeIsMinor ? nominee.guardianName : '',
         guardianDateOfBirth: nomineeIsMinor ? nominee.guardianDob : '',

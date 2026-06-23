@@ -855,6 +855,7 @@ export async function doProcessAPYPolicy(input: {
     PASSWORD,
     debitAccountNumber,
     customerId,
+    nomineeName,
   );
 
   const response = await postEndpoint(
