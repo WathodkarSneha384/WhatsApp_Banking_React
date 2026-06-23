@@ -171,7 +171,7 @@ export default function PMSocial() {
   );
 
   const sendOtpAndProceed = async () => {
-    if (scheme !== 'PMJJBY' && scheme !== 'PMSBY') {
+    if (scheme !== 'PMJJBY' && scheme !== 'PMSBY' && scheme !== 'PMAPY') {
       setStep('otp');
       return;
     }
@@ -205,7 +205,7 @@ export default function PMSocial() {
               : installmentFreq === 'Quarterly'
                 ? 'Q'
                 : 'H',
-          installmentAmt: String(installmentAmount ?? ''),
+          insurancePremiumAmount: Number(installmentAmount ?? 0),
           nomineeName: nominee.nomineeName,
           nomineedob: nominee.nomineeDob,
           nomineeRelCode: nominee.relation,

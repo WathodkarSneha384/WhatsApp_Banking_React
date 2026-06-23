@@ -815,7 +815,7 @@ export async function doProcessAPYPolicy(input: {
   insuranceCompany: string;
   pensionAmount: string;
   installmentFreq: string;
-  installmentAmt: string;
+  insurancePremiumAmount: Number;
   nomineeName: string;
   nomineedob: string;
   nomineeRelCode: string;
@@ -833,7 +833,7 @@ export async function doProcessAPYPolicy(input: {
     insuranceCompany,
     pensionAmount,
     installmentFreq,
-    installmentAmt,
+    insurancePremiumAmount,
     nomineeName,
     nomineedob,
     nomineeRelCode,
@@ -867,9 +867,9 @@ export async function doProcessAPYPolicy(input: {
       customerId,
       debitAccountNumber,
       insuranceCompany,
-      pensionAmount,
+      pensionAmount:pensionAmount,
       installmentFreq,
-      installmentAmt,
+      insurancePremiumAmount: Number(insurancePremiumAmount ?? ''),
       nomineeName,
       nomineedob,
       nomineeRelCode,
@@ -917,7 +917,7 @@ export async function getAPYPreInsAmount(input: {
       timeStamp,
       debitAccountNo,
       insuranceType,
-      pensionamount,
+      pensionAmount: pensionamount,
       insatllmentFreq,
     }
   );
