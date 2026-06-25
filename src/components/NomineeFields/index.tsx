@@ -59,7 +59,11 @@ export function validateNomineeFields(
   if (!values.nomineeDob) e.nomineeDob = 'Date of birth is required';
   if (!values.relation) e.relation = 'Please select a relationship';
   if (isMinor(values.nomineeDob)) {
-    if (!values.guardianName.trim()) e.guardianName = 'Guardian name is required for minor nominee';
+    if (!values.guardianName.trim()) {
+      e.guardianName = 'Guardian name is required for minor nominee';
+    } else if (!/^[A-Za-z\s]+$/.test(values.guardianName.trim())) {
+      e.guardianName = 'Guardian name must contain only letters and spaces';
+    }
     if (requireGuardianDob && !values.guardianDob) {
       e.guardianDob = 'Guardian date of birth is required';
     } else if (values.guardianDob && isMinor(values.guardianDob)) {
@@ -111,7 +115,16 @@ export default function NomineeFields({
           type="date"
           max={today}
           value={values.nomineeDob}
-          onChange={e => onChange('nomineeDob', e.target.value)}
+          onChange={e => {
+            const selectedDate = e.target.value;
+
+            if (selectedDate > today) {
+              onChange('nomineeDob', '');
+              return;
+            }
+
+            onChange('nomineeDob', selectedDate);
+          }}
         />
         {errors.nomineeDob && <p className="form-error">⚠ {errors.nomineeDob}</p>}
         {age !== null && (
@@ -166,7 +179,7 @@ export default function NomineeFields({
               />
               {values.guardianDob && (
                 <p className="form-hint" style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)' }}>
-                  Selected: {formatDDMMYYYY(values.guardianDob)}
+                  {/* Selected: {formatDDMMYYYY(values.guardianDob)} */}
                 </p>
               )}
               {errors.guardianDob && <p className="form-error">⚠ {errors.guardianDob}</p>}

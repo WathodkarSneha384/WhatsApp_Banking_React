@@ -37,9 +37,11 @@ type FormErrors = Partial<Record<keyof EntryForm, string>>;
 
 function OtpBoxes({
   onComplete,
+  onclick,
   disabled,
 }: {
   onComplete: (otp: string) => void | Promise<void>;
+  onclick?: () => void;
   disabled?: boolean;
 }) {
   const OTP_LENGTH = 5;
@@ -76,6 +78,11 @@ function OtpBoxes({
       Promise.resolve(onComplete(pasted)).finally(() => setVerifying(false));
     }
   };
+  
+
+  function sendOtpAndProceed(): import("react").MouseEventHandler<HTMLButtonElement> | undefined {
+    throw new Error('Function not implemented.');
+  }
 
   return (
     <div className="otp-wrap">
@@ -104,7 +111,9 @@ function OtpBoxes({
       <p className="otp-state">{verifying ? 'Verifying…' : resendMsg}</p>
       <p className="resend">
         Didn't receive OTP?{' '}
-        <button type="button" onClick={() => setResendMsg('A new OTP has been sent ✓')}>Resend OTP</button>
+        <button type="button" onClick={onclick}>
+          Resend OTP
+        </button>
       </p>
     </div>
   );
@@ -465,7 +474,7 @@ export default function PPS() {
       return (
         <div className="card">
           {apiError && <p className="ferr" style={{ marginBottom: 12 }}>⚠ {apiError}</p>}
-          <OtpBoxes onComplete={handleOtpComplete} disabled={loading} />
+          <OtpBoxes onComplete={handleOtpComplete} disabled={loading} onclick={sendOtpAndProceed} />
         </div>
       );
     }
@@ -477,7 +486,7 @@ export default function PPS() {
             <span>⚠️</span>
             <span>OTP verified. Review once more and submit to register this cheque for Positive Payment.</span>
           </div>
-          {apiError && <div className="note warn"><span>⚠️</span><span>{apiError}</span></div>}
+          {/* {apiError && <div className="note warn"><span>⚠️</span><span>{apiError}</span></div>} */}
           <div className="card">
             <div className="card-title"><span className="ic">📤</span>Final submission</div>
             <p className="card-sub">Once submitted, changes cannot be made.</p>
@@ -531,7 +540,7 @@ export default function PPS() {
           <button type="button" className="btn btn-primary" disabled={loading} onClick={sendOtpAndProceed}>
             {loading ? 'Sending OTP…' : 'Continue to OTP Verification →'}
           </button>
-          {apiError && <p className="ferr" style={{ marginTop: 12 }}>⚠ {apiError}</p>}
+          {/* {apiError && <p className="ferr" style={{ marginTop: 12 }}>⚠ {apiError}</p>} */}
           <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
             Cancel
           </button>
@@ -553,7 +562,7 @@ export default function PPS() {
           <button type="button" className="btn btn-primary" disabled={loading || !otpVerified} onClick={submitPpsEntry}>
             {loading ? 'Submitting…' : 'Submit PPS Entry →'}
           </button>
-          {apiError && <p className="ferr" style={{ marginTop: 12 }}>⚠ {apiError}</p>}
+          {/* {apiError && <p className="ferr" style={{ marginTop: 12 }}>⚠ {apiError}</p>} */}
           <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
             Cancel
           </button>

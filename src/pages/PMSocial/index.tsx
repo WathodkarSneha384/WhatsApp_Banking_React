@@ -549,7 +549,16 @@ export default function PMSocial() {
           {apiError && <p className="form-error">⚠ {apiError}</p>}
           <OTPInput onComplete={handleOtpComplete} />
           {loading && <p style={{ marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>Verifying…</p>}
-          <p className="resend-text">Didn't receive OTP? <span className="resend-link">Resend OTP</span></p>
+         <p className="resend-text">
+            Didn't receive OTP?{' '}
+            <span
+              className="resend-link"
+              onClick={sendOtpAndProceed}
+              style={{ cursor: 'pointer' }}
+            >
+              Resend OTP
+            </span>
+          </p>
         </div>
       </div>
       <Actions>

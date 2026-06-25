@@ -205,7 +205,7 @@ export default function Nominee() {
         variant={operationResult.status}
         title={operationResult.title}
         message={operationResult.message}
-        
+
         onCancel={resetToServiceHome}
       />
     );
@@ -260,9 +260,9 @@ export default function Nominee() {
 
           {nomineeExists === false && (
             <>
-              <div className="info-box success">
+              {/* <div className="info-box success">
                 <span>✅ No nominee found. You can proceed with registration.</span>
-              </div>
+              </div> */}
 
               <div className="divider" />
               <div className="section-heading">Nominee Details</div>
@@ -315,7 +315,7 @@ export default function Nominee() {
               {loading ? 'Sending OTP…' : 'Continue to OTP Verification →'}
             </button>
           </div>
-          {apiError && <p className="form-error" style={{ marginTop: 12 }}>⚠ {apiError}</p>}
+          {/* {apiError && <p className="form-error" style={{ marginTop: 12 }}>⚠ {apiError}</p>} */}
           <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
             Cancel
           </button>
@@ -343,7 +343,16 @@ export default function Nominee() {
             }}
           />
           {loading && <p style={{ marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>Verifying…</p>}
-          <p className="resend-text">Didn't receive OTP? <span className="resend-link">Resend OTP</span></p>
+          <p className="resend-text">
+            Didn't receive OTP?{' '}
+            <span
+              className="resend-link"
+              onClick={sendOtpAndProceed}
+              style={{ cursor: 'pointer' }}
+            >
+              Resend OTP
+            </span>
+          </p>
         </div>
       </div>
       <Actions>
