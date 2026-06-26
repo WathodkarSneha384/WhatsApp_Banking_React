@@ -1218,6 +1218,19 @@
     word-break: break-word;
   }
 
+  .bank-app .summary-row-account {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .bank-app .summary-row-account .summary-val {
+    flex: 1;
+    min-width: 0;
+    text-align: right;
+  }
+
   .bank-app .card .summary-row {
     margin-left: -16px;
     margin-right: -16px;
@@ -1436,6 +1449,12 @@
 .bank-app .sumrow .v .account-display {
   align-items: flex-end;
   width: 100%;
+  text-align: right;
+}
+
+.bank-app .summary-row-account .summary-val {
+  flex: 1;
+  min-width: 0;
   text-align: right;
 }
 

@@ -107,7 +107,7 @@ export default function Nominee() {
 
   const reviewSummary = (
     <>
-      <div className="summary-row"><span className="summary-key">Account</span><span className="summary-val"><AccountDisplay account={acc} /></span></div>
+      <div className="summary-row summary-row-account"><span className="summary-key">Account</span><span className="summary-val"><AccountDisplay account={acc} /></span></div>
       <div className="divider" />
       <div className="section-heading">Nominee Details</div>
       <div className="summary-row"><span className="summary-key">Nominee Name</span><span className="summary-val">{nominee.nomineeName}</span></div>

@@ -5,7 +5,6 @@ import { useServiceFlowReset } from '../../hooks/useServiceFlowReset';
 import Select from '../../components/Select';
 import { Stepper, Actions } from '../../components/ServiceShell';
 import { useAccounts } from '../../hooks/useAccounts';
-import { usePPSParameters } from '../../hooks/usePPSParameters';
 import { createPPSChequeEntry, sendOtp, validateOtp } from '../../services/api';
 import AccountDisplay from '../../components/AccountDisplay';
 import { toInputDate } from '../../utils/date';
@@ -28,10 +27,10 @@ interface EntryForm {
   payeeName: string;
 }
 
-const ENTRY_STEPS = ['Select Service', 'Enter Details', 'Review', 'Verify OTP', 'Submit', 'Done'];
+const ENTRY_STEPS = ['Enter Details', 'Review', 'Verify OTP', 'Submit', 'Done'];
 const VIEW_STEPS = ['Select Service', 'Search', 'Result'];
 
-const STEP_NUM: Record<Step, number> = { select: 1, form: 2, confirm: 3, otp: 4, submit: 5, result: 6 };
+const STEP_NUM: Record<Step, number> = { select: 0, form: 1, confirm: 2, otp: 3, submit: 4, result: 5 };
 
 type FormErrors = Partial<Record<keyof EntryForm, string>>;
 
@@ -134,8 +133,8 @@ function OtpBoxes({
 
 export default function PPS() {
   const { setCurrentStep, customer } = useFlow();
-  const [mode, setMode] = useState<Mode | null>(null);
-  const [step, setStep] = useState<Step>('select');
+  const [mode, setMode] = useState<Mode>('entry');
+  const [step, setStep] = useState<Step>('form');
   const [form, setForm] = useState<EntryForm>({ accountNo: '', chequeNo: '', chequeAmount: '', issueDate: '', payeeName: '' });
   const [viewChequeNo, setViewChequeNo] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
@@ -147,7 +146,6 @@ export default function PPS() {
   const resetToServiceHome = useServiceFlowReset('pps');
 
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
-  const { params: ppsParams } = usePPSParameters();
 
   const stepLabels = mode === 'view' ? VIEW_STEPS : ENTRY_STEPS;
   const curStep = STEP_NUM[step];
@@ -171,12 +169,6 @@ export default function PPS() {
     const n = Number(form.chequeAmount);
     if (!form.chequeAmount.trim() || isNaN(n) || n <= 0) {
       e.chequeAmount = 'Enter a valid amount';
-    } else if (ppsParams) {
-      if (n < ppsParams.minChequeAmount) {
-        e.chequeAmount = `Minimum cheque amount is ₹${ppsParams.minChequeAmount.toLocaleString('en-IN')}`;
-      } else if (n > ppsParams.maxChequeAmount) {
-        e.chequeAmount = `Maximum cheque amount is ₹${ppsParams.maxChequeAmount.toLocaleString('en-IN')}`;
-      }
     }
 
     if (!form.issueDate) {
@@ -215,9 +207,24 @@ export default function PPS() {
     return toInputDate(date);
   };
 
+  const restartEntryForm = () => {
+    setMode('entry');
+    setStep('form');
+    setForm({ accountNo: '', chequeNo: '', chequeAmount: '', issueDate: '', payeeName: '' });
+    setViewChequeNo('');
+    setErrors({});
+    setLoading(false);
+    setApiError('');
+    setOtpVerified(false);
+  };
+
   const restart = (m?: Mode) => {
-    setMode(m ?? null);
-    setStep(m ? 'form' : 'select');
+    if (m === 'entry' || !m) {
+      restartEntryForm();
+      return;
+    }
+    setMode(m);
+    setStep('form');
     setForm({ accountNo: '', chequeNo: '', chequeAmount: '', issueDate: '', payeeName: '' });
     setViewChequeNo('');
     setErrors({});
@@ -318,6 +325,7 @@ export default function PPS() {
       );
     }
 
+    /* Choose a service — skipped; flow opens directly on Positive Payment Entry.
     if (step === 'select') {
       return (
         <div className="card">
@@ -350,6 +358,7 @@ export default function PPS() {
         </div>
       );
     }
+    */
 
     if (step === 'form' && mode === 'view') {
       return (
@@ -433,11 +442,6 @@ export default function PPS() {
                 value={form.chequeAmount}
                 onChange={e => setField('chequeAmount', e.target.value)}
               />
-              {ppsParams && (
-                <p className="fhint">
-                  Allowed range: ₹{ppsParams.minChequeAmount.toLocaleString('en-IN')} – ₹{ppsParams.maxChequeAmount.toLocaleString('en-IN')}
-                </p>
-              )}
               {errors.chequeAmount && <p className="ferr">⚠ {errors.chequeAmount}</p>}
             </div>
           </div>
@@ -534,6 +538,7 @@ export default function PPS() {
     if (step === 'result') {
       return null;
     }
+    /* Choose a service — skipped; flow opens directly on Positive Payment Entry.
     if (step === 'select') {
       return (
         <Actions>
@@ -541,6 +546,7 @@ export default function PPS() {
         </Actions>
       );
     }
+    */
 
     if (step === 'form' && mode === 'view') {
       return (
@@ -591,8 +597,6 @@ export default function PPS() {
 
       return (
         <Actions>
-
-          <button type="button" className="btn btn-secondary" onClick={() => { setMode(null); setStep('select'); }}>← Back</button>
           <button
             type="button"
             className="btn btn-primary"
@@ -613,7 +617,7 @@ export default function PPS() {
             {loading ? 'Sending OTP…' : 'Continue to OTP Verification →'}
           </button>
           {/* {apiError && <p className="ferr" style={{ marginTop: 12 }}>⚠ {apiError}</p>} */}
-          <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
+          <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={restartEntryForm}>
             Cancel
           </button>
         </Actions>
@@ -623,7 +627,7 @@ export default function PPS() {
       return (
         <Actions>
           <button type="button" className="btn btn-secondary" onClick={() => { setApiError(''); setStep('confirm'); }}>← Back</button>
-          <button type="button" className="btn btn-secondary" onClick={resetToServiceHome}>Cancel</button>
+          <button type="button" className="btn btn-secondary" onClick={restartEntryForm}>Cancel</button>
         </Actions>
       );
     }
@@ -635,7 +639,7 @@ export default function PPS() {
             {loading ? 'Submitting…' : 'Submit PPS Entry →'}
           </button>
           {apiError && <p className="ferr" style={{ marginTop: 12 }}>⚠ {apiError}</p>}
-          <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={() => restart('entry')}>
+          <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={restartEntryForm}>
             Cancel
           </button>
         </Actions>
