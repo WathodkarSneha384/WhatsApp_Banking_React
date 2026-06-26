@@ -21,6 +21,7 @@ import { formatDDMMYYYY } from '../../utils/date';
 import {
   PENSION_AMOUNT_OPTIONS,
   getPmapyInstallmentAmount,
+  parsePmSchemePremiumFromApi,
   type PmapyInstallmentFrequency,
 } from '../../utils/pmPremium';
 import { relationLabel } from '../../utils/relationLabel';
@@ -88,25 +89,49 @@ export default function PMSocial() {
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
   const { premium: premiumDetails, loading: premiumLoading } = useInsurancePremium(insuranceScheme);
   const { relations } = useRelations('pmyrelation');
-  const [installmentAmount, setInstallmentAmount] = useState<number | null>(null);
+  const [apyPremium, setApyPremium] = useState<{ totalPremium: number; firstPremium: number } | null>(null);
+  const [apyPremiumLoading, setApyPremiumLoading] = useState(false);
+  const [apyMessage, setApyMessage] = useState('');
+  const [apyEligible, setApyEligible] = useState(true);
+
 
   useEffect(() => {
-    const fetchInstallmentAmount = async () => {
+    const fetchApyPremium = async () => {
       if (!savingAccount || !pensionAmount || !installmentFreq) {
-        setInstallmentAmount(null);
+        setApyPremium(null);
         return;
       }
 
-      const amount = await getPmapyInstallmentAmount(
-        savingAccount,
-        Number(pensionAmount),
-        installmentFreq as PmapyInstallmentFrequency,
-      );
+      setApyPremiumLoading(true);
+      try {
+        const response = await getPmapyInstallmentAmount(
+          savingAccount,
+          Number(pensionAmount),
+          installmentFreq as PmapyInstallmentFrequency,
+        );
 
-      setInstallmentAmount(amount);
+        if (!response) {
+          setApyPremium(null);
+          return;
+        }
+
+        if (response.errorCode !== '00') {
+          setApyEligible(false);
+          setApyPremium(null);
+          setApyMessage(response.errorMsg);
+          return;
+        }
+
+        setApyEligible(true);
+        setApyMessage(response.errorMsg || '');
+        const premium = parsePmSchemePremiumFromApi(response);
+        setApyPremium(premium);
+      } finally {
+        setApyPremiumLoading(false);
+      }
     };
 
-    fetchInstallmentAmount();
+    fetchApyPremium();
   }, [savingAccount, pensionAmount, installmentFreq]);
 
   useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step, setCurrentStep]);
@@ -195,7 +220,7 @@ export default function PMSocial() {
             : installmentFreq === 'Quarterly'
             ? 'Q'
             : 'H',
-        installmentAmt: String(installmentAmount ?? ''),
+        insurancePremiumAmount: Number(apyPremium?.firstPremium ?? 0),
         nomineeName: nominee.nomineeName,
         nomineedob: nominee.nomineeDob,
         nomineeRelCode: nominee.relation,
@@ -203,7 +228,7 @@ export default function PMSocial() {
         spouseName: '',
         spouseAdharno: '',
         guardinName: nomineeIsMinor ? nominee.guardianName : '',
-        reltwithMinor: nomineeIsMinor ? nominee.guardianRelation : '',
+        reltwithMinor: nomineeIsMinor ? Number(nominee.guardianRelation) : 0,
         providentFund: '',
       });
       return result.prannumber as string;
@@ -261,9 +286,19 @@ export default function PMSocial() {
     }
   };
 
-  const annualPremiumLabel = (scheme === 'PMJJBY' || scheme === 'PMSBY') && premiumDetails
-    ? `₹${premiumDetails.totalPremium.toLocaleString('en-IN')} / year`
-    : SCHEME_INFO[scheme].premium;
+  const annualPremiumLabel =
+    (scheme === 'PMJJBY' || scheme === 'PMSBY') && premiumDetails
+      ? `₹${premiumDetails.totalPremium.toLocaleString('en-IN')} / year`
+      : scheme === 'PMAPY' && apyPremium
+        ? `₹${apyPremium.totalPremium.toLocaleString('en-IN')} / year`
+        : SCHEME_INFO[scheme].premium;
+
+  const firstPremiumAmount =
+    (scheme === 'PMJJBY' || scheme === 'PMSBY')
+      ? premiumDetails?.firstPremium
+      : scheme === 'PMAPY'
+        ? apyPremium?.firstPremium
+        : undefined;
 
   if (step === 'result' && operationResult) {
     return (
@@ -325,16 +360,32 @@ export default function PMSocial() {
                 />
                 {formErrors.installmentFreq && <p className="form-error">⚠ {formErrors.installmentFreq}</p>}
               </div>
-              <div className="form-group">
-                <label className="form-label">Installment Amount</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  readOnly
-                  value={installmentAmount != null ? `₹${installmentAmount}` : ''}
-                  placeholder="Select pension amount and frequency"
-                />
-              </div>
+
+              {apyPremiumLoading && (
+                <p className="form-hint">Loading premium details…</p>
+              )}
+
+              {apyPremium && (
+                <>
+                  <div className="summary-row">
+                    <span className="summary-key">Annual Premium</span>
+                    <span className="summary-val">₹{apyPremium.totalPremium.toLocaleString('en-IN')} / year</span>
+                  </div>
+                  <div className="summary-row">
+                    <span className="summary-key">First Premium Amount (Pro Rata)</span>
+                    <span className="summary-val">₹{apyPremium.firstPremium.toLocaleString('en-IN')}</span>
+                  </div>
+                </>
+              )}
+
+              {apyMessage && (
+                <p
+                  className={apyEligible ? 'form-success' : 'form-error'}
+                  style={{ marginTop: 6 }}
+                >
+                  {apyMessage}
+                </p>
+              )}
             </>
           )}
 
@@ -373,7 +424,15 @@ export default function PMSocial() {
         </div>
       </div>
       <Actions>
-        <button className="btn btn-primary" onClick={() => { if (validateForm()) setStep('confirm'); }}>
+        <button
+          className="btn btn-primary"
+          disabled={!apyEligible}
+          onClick={() => {
+            if (validateForm() && apyEligible) {
+              setStep('confirm');
+            }
+          }}
+        >
           Review →
         </button>
       </Actions>
@@ -400,27 +459,22 @@ export default function PMSocial() {
           {premiumLoading && (scheme === 'PMJJBY' || scheme === 'PMSBY') && (
             <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading premium details…</p>
           )}
-          {premiumDetails && (scheme === 'PMJJBY' || scheme === 'PMSBY') && (
-            <>
-              <div className="summary-row">
-                <span className="summary-key">First Premium Amount (Pro Rata)</span>
-                <span className="summary-val">₹{premiumDetails.firstPremium.toLocaleString('en-IN')}</span>
-              </div>
-              {premiumDetails.nextDebitWindow && (
-                <div className="summary-row">
-                  <span className="summary-key">Next Premium Debit Window</span>
-                  <span className="summary-val">{premiumDetails.nextDebitWindow}</span>
-                </div>
-              )}
-            </>
+          {firstPremiumAmount != null && (
+            <div className="summary-row">
+              <span className="summary-key">First Premium Amount (Pro Rata)</span>
+              <span className="summary-val">₹{firstPremiumAmount.toLocaleString('en-IN')}</span>
+            </div>
+          )}
+          {premiumDetails?.nextDebitWindow && (scheme === 'PMJJBY' || scheme === 'PMSBY') && (
+            <div className="summary-row">
+              <span className="summary-key">Next Premium Debit Window</span>
+              <span className="summary-val">{premiumDetails.nextDebitWindow}</span>
+            </div>
           )}
           {scheme === 'PMAPY' && (
             <>
               <div className="summary-row"><span className="summary-key">Pension Amount</span><span className="summary-val">₹{Number(pensionAmount).toLocaleString('en-IN')} / month</span></div>
               <div className="summary-row"><span className="summary-key">Installment Frequency</span><span className="summary-val">{installmentFreq}</span></div>
-              {installmentAmount != null && (
-                <div className="summary-row"><span className="summary-key">Installment Amount</span><span className="summary-val">₹{installmentAmount}</span></div>
-              )}
             </>
           )}
           <div className="divider" />

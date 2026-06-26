@@ -15,6 +15,7 @@ function normalizeApiMaturity(
     periodType: 'Days' | 'Months';
     depositType: 'Simple' | 'Compound';
     interestPayMode: string;
+
   },
 ): MaturityPreview | null {
   const maturityAmount = Number(data.maturityAmount ?? data.MATURITYAMT);
@@ -56,6 +57,7 @@ export function useCalculateMaturity(
   periodType: 'Days' | 'Months' | '',
   depositType: 'Simple' | 'Compound' | '',
   interestPayMode: string,
+  renewalRequired: string,
 ) {
   const [maturityData, setMaturityData] = useState<MaturityPreview | null>(null);
   const [loading, setLoading] = useState(false);
@@ -71,6 +73,7 @@ export function useCalculateMaturity(
       !periodType ||
       !depositType ||
       !interestPayMode ||
+      !renewalRequired ||
       !depositAmount.trim() ||
       Number.isNaN(amount) ||
       amount < 1000 ||
@@ -92,7 +95,7 @@ export function useCalculateMaturity(
       interestPayMode,
     });
 
-    calculateMaturity(amount, schemeCode, monthNum, dayNum,interestPayMode)
+    calculateMaturity(amount, schemeCode, monthNum, dayNum, interestPayMode)
       .then((res) => {
         if (cancelled) return;
         const normalized = normalizeApiMaturity(res as Record<string, unknown>, {
@@ -116,7 +119,14 @@ export function useCalculateMaturity(
     return () => {
       cancelled = true;
     };
-  }, [depositAmount, schemeCode, months, days, periodType, depositType, interestPayMode]);
+  }, [depositAmount,
+    schemeCode,
+    months,
+    days,
+    periodType,
+    depositType,
+    interestPayMode,
+    renewalRequired,]);
 
   return { maturityData, loading };
 }

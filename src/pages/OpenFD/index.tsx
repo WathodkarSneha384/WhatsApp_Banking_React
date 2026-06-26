@@ -105,6 +105,11 @@ export default function OpenFD() {
     renewalRequired: '', interestPayMode: '', periodType: '', depositPeriod: '',
     nomineeSource: '',
   });
+  const accountNominee = {
+  nomineeName: '',
+  nomineeDob: '',
+  relation: 'SIS',
+};
   const [errors, setErrors] = useState<FDErrors>({});
   const [nominee, setNominee] = useState<NomineeFieldValues>(EMPTY_NOMINEE);
   const [nomineeErrors, setNomineeErrors] = useState<NomineeFieldErrors>({});
@@ -119,19 +124,39 @@ export default function OpenFD() {
   const [apiError, setApiError] = useState('');
   const otpCountdown = useOtpCountdown(step === 'otp');
   const nomineeIsMinor = nominee.nomineeDob ? (calcAge(nominee.nomineeDob) ?? 18) < 18 : false;
+  const canCalculateMaturity =
+  !!form.depositAmount &&
+  !!form.depositType &&
+  !!form.renewalRequired &&
+  !!form.interestPayMode &&
+  !!form.periodType &&
+  !!form.depositPeriod;
 
-  const {
-    maturityData,
-    loading: maturityLoading,
-  } = useCalculateMaturity(
-    form.depositAmount,
-    form.depositType === 'Simple' ? '001' : '002',
-    form.periodType === 'Months' ? form.depositPeriod : '0',
-    form.periodType === 'Days' ? form.depositPeriod : '0',
-    form.periodType as 'Days' | 'Months' | '',
-    form.depositType as 'Simple' | 'Compound' | '',
-    toInterestPayModeApiCode(form.interestPayMode),
-  );
+const {
+  maturityData,
+  loading: maturityLoading,
+} = useCalculateMaturity(
+  canCalculateMaturity ? form.depositAmount : '',
+  canCalculateMaturity
+    ? (form.depositType === 'Simple' ? '001' : '002')
+    : '',
+  canCalculateMaturity && form.periodType === 'Months'
+    ? form.depositPeriod
+    : '0',
+  canCalculateMaturity && form.periodType === 'Days'
+    ? form.depositPeriod
+    : '0',
+  canCalculateMaturity
+    ? (form.periodType as 'Days' | 'Months')
+    : '',
+  canCalculateMaturity
+    ? (form.depositType as 'Simple' | 'Compound')
+    : '',
+  canCalculateMaturity
+    ? toInterestPayModeApiCode(form.interestPayMode)
+    : '',
+  form.renewalRequired // new parameter
+);
   console.log('Deposite Type===', form.depositType, 'Period Type===', form.periodType, 'Deposit Period===', form.depositPeriod, 'Interest Pay Mode===', form.interestPayMode);
   const fetchExistingNominee = async (accountNumber: string) => {
     if (!accountNumber) {
@@ -191,6 +216,23 @@ export default function OpenFD() {
       }));
     }
   }, [existingNominee, form.nomineeSource]);
+
+  useEffect(() => {
+  if (form.nomineeSource === 'existing' && accountNominee) {
+    setNominee({
+      nomineeName: accountNominee.nomineeName || '',
+      nomineeDob: accountNominee.nomineeDob || '',
+      relation: accountNominee.relation || '',
+      guardianName: '',
+      guardianDob: '',
+      guardianRelation: '',
+    });
+  }
+
+  if (form.nomineeSource === 'new') {
+    setNominee(EMPTY_NOMINEE);
+  }
+}, [form.nomineeSource, accountNominee]);
 
   useEffect(() => {
     if (form.savingAccount) {
@@ -298,9 +340,9 @@ export default function OpenFD() {
 
         nomineeisMinor: 'N',
 
-        nomineeName: nominee.nomineeName,
-        nomineeDateOfBirth: nominee.nomineeDob,
-        nomineeRelation: nominee.relation,
+        nomineeName: form.nomineeSource === 'existing'?existingNominee.nomineeName : nominee.nomineeName,
+        nomineeDateOfBirth: form.nomineeSource === 'existing'?existingNominee.nomineeDob : nominee.nomineeDob,
+        nomineeRelation: form.nomineeSource === 'existing'?existingNominee.relation : nominee.relation,
 
         guardianName: nomineeIsMinor ? nominee.guardianName : '',
         guardianDateOfBirth: nomineeIsMinor ? nominee.guardianDob : '',

@@ -114,7 +114,16 @@ export default function NomineeFields({
           type="date"
           max={today}
           value={values.nomineeDob}
-          onChange={e => onChange('nomineeDob', e.target.value)}
+          onChange={e => {
+            const selectedDate = e.target.value;
+
+            if (selectedDate > today) {
+              onChange('nomineeDob', '');
+              return;
+            }
+
+            onChange('nomineeDob', selectedDate);
+          }}
         />
         {errors.nomineeDob && <p className="form-error">⚠ {errors.nomineeDob}</p>}
         {age !== null && (

@@ -509,7 +509,7 @@ export default function PPS() {
             <span>⚠️</span>
             <span>OTP verified. Review once more and submit to register this cheque for Positive Payment.</span>
           </div>
-          {apiError && <div className="note warn"><span>⚠️</span><span>{apiError}</span></div>}
+          {/* {apiError && <div className="note warn"><span>⚠️</span><span>{apiError}</span></div>} */}
           <div className="card">
             <div className="card-title"><span className="ic">📤</span>Final submission</div>
             <p className="card-sub">Once submitted, changes cannot be made.</p>
@@ -563,7 +563,7 @@ export default function PPS() {
           <button type="button" className="btn btn-primary" disabled={loading} onClick={sendOtpAndProceed}>
             {loading ? 'Sending OTP…' : 'Continue to OTP Verification →'}
           </button>
-          {apiError && <p className="ferr" style={{ marginTop: 12 }}>⚠ {apiError}</p>}
+          {/* {apiError && <p className="ferr" style={{ marginTop: 12 }}>⚠ {apiError}</p>} */}
           <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
             Cancel
           </button>

@@ -312,7 +312,10 @@ export async function fetchInsurancePremium(
       SECRET_KEY, VENDOR, 'getpreinsamount', USERNAME, PASSWORD, scheme
     );
 
-    const data = await postEndpoint<BankApiResponse & { insurancePremiumAmount?: string }>(
+    const data = await postEndpoint<BankApiResponse & {
+      totalAmount?: string | number;
+      insurancePremiumAmount?: string | number;
+    }>(
       'getpreinsamount',
       {
         ...basePayload('getpreinsamount', checkSum),
@@ -323,10 +326,11 @@ export async function fetchInsurancePremium(
       },
     );
 
-    const totalPremium = Number(data.insurancePremiumAmount ?? calculated.totalPremium);
+    const totalPremium = Number(data.totalAmount ?? calculated.totalPremium);
+    const firstPremium = Number(data.insurancePremiumAmount ?? calculated.firstPremium);
     return {
       totalPremium: Number.isFinite(totalPremium) ? totalPremium : calculated.totalPremium,
-      firstPremium: calculated.firstPremium,
+      firstPremium: Number.isFinite(firstPremium) ? firstPremium : calculated.firstPremium,
       nextDebitWindow: calculated.nextDebitWindow,
       source: 'api',
     };
@@ -824,21 +828,24 @@ export async function openFDAccount(input: {
 }
 
 export async function doProcessAPYPolicy(input: {
-  bank: string;
-  customerId: string;
-  debitAccountNumber: string;
+  bank:string;
   insuranceCompany: string;
+ customerId: string;
+  debitAccountNumber: string;
   pensionAmount: string;
   installmentFreq: string;
-  installmentAmt: string;
+  insurancePremiumAmount: number;
+
   nomineeName: string;
   nomineedob: string;
   nomineeRelCode: string;
+
   nomineeAdharno?: string;
   spouseName?: string;
   spouseAdharno?: string;
+
   guardinName?: string;
-  reltwithMinor?: string;
+  reltwithMinor?: Number;
   providentFund?: string;
 }): Promise<any> {
   const {
@@ -848,7 +855,7 @@ export async function doProcessAPYPolicy(input: {
     insuranceCompany,
     pensionAmount,
     installmentFreq,
-    installmentAmt,
+    insurancePremiumAmount,
     nomineeName,
     nomineedob,
     nomineeRelCode,
@@ -856,7 +863,7 @@ export async function doProcessAPYPolicy(input: {
     spouseName = '',
     spouseAdharno = '',
     guardinName = '',
-    reltwithMinor = '',
+    reltwithMinor = 0,
     providentFund = '',
   } = input;
 
@@ -870,6 +877,7 @@ export async function doProcessAPYPolicy(input: {
     PASSWORD,
     debitAccountNumber,
     customerId,
+    nomineeName,
   );
 
   const response = await postEndpoint(
@@ -881,9 +889,9 @@ export async function doProcessAPYPolicy(input: {
       customerId,
       debitAccountNumber,
       insuranceCompany,
-      pensionAmount,
+      pensionAmount:pensionAmount,
       installmentFreq,
-      installmentAmt,
+      insurancePremiumAmount: Number(insurancePremiumAmount ?? ''),
       nomineeName,
       nomineedob,
       nomineeRelCode,
@@ -900,13 +908,13 @@ export async function doProcessAPYPolicy(input: {
 }
 
 export async function getAPYPreInsAmount(input: {
-  Debitaccountnon: string;
+  debitAccountNo: string;
   insuranceType: string;
   pensionamount: string;
   insatllmentFreq: 'M' | 'Q' | 'H';
 }): Promise<any> {
   const {
-    Debitaccountnon,
+    debitAccountNo,
     insuranceType,
     pensionamount,
     insatllmentFreq,
@@ -920,9 +928,8 @@ export async function getAPYPreInsAmount(input: {
     'getAPYpreinsamount',
     USERNAME,
     PASSWORD,
-    Debitaccountnon,
     insuranceType,
-    pensionamount,
+    debitAccountNo,
   );
 
   const response = await postEndpoint(
@@ -930,9 +937,9 @@ export async function getAPYPreInsAmount(input: {
     {
       ...basePayload('getAPYpreinsamount', checkSum),
       timeStamp,
-      Debitaccountnon,
+      debitAccountNo,
       insuranceType,
-      pensionamount,
+      pensionAmount: pensionamount,
       insatllmentFreq,
     }
   );

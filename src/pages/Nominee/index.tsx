@@ -218,7 +218,7 @@ export default function Nominee() {
         variant={operationResult.status}
         title={operationResult.title}
         message={operationResult.message}
-        refNo={operationResult.refNo}
+
         onCancel={resetToServiceHome}
       />
     );
@@ -323,7 +323,7 @@ export default function Nominee() {
               {loading ? 'Sending OTP…' : 'Continue to OTP Verification →'}
             </button>
           </div>
-          {apiError && <p className="form-error" style={{ marginTop: 12 }}>⚠ {apiError}</p>}
+          {/* {apiError && <p className="form-error" style={{ marginTop: 12 }}>⚠ {apiError}</p>} */}
           <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
             Cancel
           </button>
