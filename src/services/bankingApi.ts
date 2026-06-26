@@ -798,7 +798,7 @@ export async function openFDAccount(input: {
 
     customerCode: input.customerCode,
     depositAmount: input.depositAmount,
-    schemeCode: input.depositType === 'Simple' ? '001' : '002',
+    schemeCode: input.depositType === 'S' ? '001' : '002',
 
     months: input.months,
     days: input.days,
