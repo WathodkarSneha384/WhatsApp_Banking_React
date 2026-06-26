@@ -158,6 +158,7 @@ export default function PPS() {
     setForm(f => ({ ...f, [k]: v }));
     setErrors(e => ({ ...e, [k]: '' }));
   };
+  const [reviewLoading, setReviewLoading] = useState(false);
 
   const selectedAccount = accounts.find(a => a.value === form.accountNo);
 
@@ -274,7 +275,7 @@ export default function PPS() {
         mobileNo: customer.mobileNo,
       };
 
-      await createPPSChequeEntry({ ...entryPayload, ppsProcess: 'V' });
+
       const result = await createPPSChequeEntry({ ...entryPayload, ppsProcess: 'P' });
       setPpsStatus(result.resStatus);
       setOperationResult({
@@ -465,8 +466,15 @@ export default function PPS() {
                 onChange={e => setField('payeeName', e.target.value)}
               />
               {errors.payeeName && <p className="ferr">⚠ {errors.payeeName}</p>}
+              
             </div>
           </div>
+          {apiError && (
+                <div className="note warn">
+                  <span>⚠️</span>
+                  <span>{apiError}</span>
+                </div>
+              )}
         </div>
       );
     }
@@ -533,6 +541,7 @@ export default function PPS() {
         </Actions>
       );
     }
+
     if (step === 'form' && mode === 'view') {
       return (
         <Actions>
@@ -549,11 +558,51 @@ export default function PPS() {
       );
     }
     if (step === 'form') {
+      const handleReview = async () => {
+        if (!validate()) return;
+
+        setReviewLoading(true);
+        setApiError('');
+
+        try {
+          const payload = {
+            accountNo: form.accountNo,
+            chequeNo: form.chequeNo.trim(),
+            chequeAmount: form.chequeAmount.trim(),
+            payeeName: form.payeeName.trim(),
+            issueDate: form.issueDate,
+            mobileNo: customer.mobileNo,
+          };
+
+          await createPPSChequeEntry({ ...payload, ppsProcess: 'V' });
+
+          // Validation successful
+          setStep('confirm');
+        } catch (err) {
+          // Display API validation message
+          setApiError(
+            err instanceof Error ? err.message : 'Validation failed'
+          );
+        } finally {
+          setReviewLoading(false);
+        }
+      };
+
+
       return (
         <Actions>
+
           <button type="button" className="btn btn-secondary" onClick={() => { setMode(null); setStep('select'); }}>← Back</button>
-          <button type="button" className="btn btn-primary" onClick={() => { if (validate()) setStep('confirm'); }}>Review →</button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={reviewLoading}
+            onClick={handleReview}
+          >
+            {reviewLoading ? 'Validating...' : 'Review →'}
+          </button>
         </Actions>
+
       );
     }
     if (step === 'confirm') {
