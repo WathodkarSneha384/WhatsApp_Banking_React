@@ -52,6 +52,7 @@ export default function Nominee() {
   const [checkingNominee, setCheckingNominee] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [resendMsg, setResendMsg] = useState('');
 
   useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step, setCurrentStep]);
 
@@ -196,6 +197,18 @@ export default function Nominee() {
       setStep('submit');
     } catch (err) {
       setApiError(err instanceof Error ? err.message : 'OTP verification failed');
+      throw err;
+    }
+  };
+
+  const resendOtp = async () => {
+    setApiError('');
+    setResendMsg('');
+    try {
+      await sendOtp(customer.mobileNo, 'NOMINEEREGOTP');
+      setResendMsg('A new OTP has been sent ✓');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to resend OTP');
     }
   };
 
@@ -260,11 +273,6 @@ export default function Nominee() {
 
           {nomineeExists === false && (
             <>
-              <div className="info-box success">
-                <span>✅ No nominee found. You can proceed with registration.</span>
-              </div>
-
-              <div className="divider" />
               <div className="section-heading">Nominee Details</div>
               <NomineeFields
                 values={nominee}
@@ -343,11 +351,15 @@ export default function Nominee() {
             }}
           />
           {loading && <p style={{ marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>Verifying…</p>}
-          <p className="resend-text">Didn't receive OTP? <span className="resend-link">Resend OTP</span></p>
+          {resendMsg && <p className="form-hint" style={{ color: 'var(--success)' }}>{resendMsg}</p>}
+          <p className="resend-text">
+            Didn't receive OTP?{' '}
+            <button type="button" className="resend-link" onClick={resendOtp}>Resend OTP</button>
+          </p>
         </div>
       </div>
       <Actions>
-        <button className="btn btn-secondary" onClick={() => setStep('confirm')}>← Back</button>
+        <button className="btn btn-secondary" onClick={() => { setApiError(''); setResendMsg(''); setStep('confirm'); }}>← Back</button>
         <button type="button" className="btn btn-secondary" onClick={resetToServiceHome}>Cancel</button>
       </Actions>
     </>

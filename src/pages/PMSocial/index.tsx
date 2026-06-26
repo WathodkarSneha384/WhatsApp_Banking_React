@@ -80,6 +80,7 @@ export default function PMSocial() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [resendMsg, setResendMsg] = useState('');
   const [operationResult, setOperationResult] = useState<OperationResult | null>(null);
   const resetToServiceHome = useServiceFlowReset('pmsocial');
 
@@ -157,10 +158,6 @@ export default function PMSocial() {
   );
 
   const sendOtpAndProceed = async () => {
-    if (scheme !== 'PMJJBY' && scheme !== 'PMSBY') {
-      setStep('otp');
-      return;
-    }
     setLoading(true);
     setApiError('');
     try {
@@ -173,87 +170,81 @@ export default function PMSocial() {
     }
   };
 
-  const handleOtpComplete = async (otp: string) => {
+  const resendOtp = async () => {
     setApiError('');
-    if (scheme === 'PMAPY') {
-  try {
-    await validateOtp(customer.mobileNo, otp, 'PMYSCHEMEOTP');
-
-    const result = await doProcessAPYPolicy({
-      bank: '068',
-      customerId: customer.customerId,
-      debitAccountNumber: savingAccount,
-      insuranceCompany: 'APY',
-      pensionAmount: pensionAmount,
-      installmentFreq:
-        installmentFreq === 'Monthly'
-          ? 'M'
-          : installmentFreq === 'Quarterly'
-          ? 'Q'
-          : 'H',
-      installmentAmt: String(installmentAmount ?? ''),
-      nomineeName: nominee.nomineeName,
-      nomineedob: nominee.nomineeDob,
-      nomineeRelCode: nominee.relation,
-      nomineeAdharno: '',
-      spouseName:  '',
-      spouseAdharno: '',
-      guardinName: nomineeIsMinor ? nominee.guardianName : '',
-      reltwithMinor: nomineeIsMinor
-        ? nominee.guardianRelation
-        : '',
-      providentFund: '',
-    });
-
-    setOperationResult({
-      status: 'success',
-      title: 'Enrollment Successful!',
-      message: `You've been enrolled in ${scheme}. The premium will be auto-debited from ${acc?.label ?? 'your account'}${acc?.branchName ? ` (${acc.branchName})` : ''} as per schedule.`,
-      refNo: result.prannumber,
-    });
-
-    setStep('result');
-    return;
-  } catch (err) {
-    const message =
-      err instanceof Error
-        ? err.message
-        : 'Enrollment failed';
-
-    setApiError(message);
-
-    setOperationResult({
-      status: 'error',
-      title: 'Enrollment Failed',
-      message,
-    });
-
-    setStep('result');
-    return;
-  }
-}
-
-    setLoading(true);
+    setResendMsg('');
     try {
-      await validateOtp(customer.mobileNo, otp, 'PMYSCHEMEOTP');
-      const result = await doProcessPMJJBYSBY({
+      await sendOtp(customer.mobileNo, 'PMYSCHEMEOTP');
+      setResendMsg('A new OTP has been sent ✓');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to resend OTP');
+    }
+  };
+
+  const enroll = async () => {
+    if (scheme === 'PMAPY') {
+      const result = await doProcessAPYPolicy({
+        bank: '068',
         customerId: customer.customerId,
         debitAccountNumber: savingAccount,
-        insuranceCompany: scheme,
-        totalPremiumAmount: premiumDetails?.totalPremium ?? 0,
+        insuranceCompany: 'APY',
+        pensionAmount: pensionAmount,
+        installmentFreq:
+          installmentFreq === 'Monthly'
+            ? 'M'
+            : installmentFreq === 'Quarterly'
+            ? 'Q'
+            : 'H',
+        installmentAmt: String(installmentAmount ?? ''),
         nomineeName: nominee.nomineeName,
-        nomineeRelationCode: Number(nominee.relation),
-        nomineeDob: nominee.nomineeDob,
-        guardianName: nomineeIsMinor ? nominee.guardianName : '',
-        guardianRelationCode: nomineeIsMinor ? Number(nominee.guardianRelation) : 0,
-        nomineeIsMinor,
-        ruralOrUrban: ruralOrUrban === 'Urban' ? 'U' : 'R',
+        nomineedob: nominee.nomineeDob,
+        nomineeRelCode: nominee.relation,
+        nomineeAdharno: '',
+        spouseName: '',
+        spouseAdharno: '',
+        guardinName: nomineeIsMinor ? nominee.guardianName : '',
+        reltwithMinor: nomineeIsMinor ? nominee.guardianRelation : '',
+        providentFund: '',
       });
+      return result.prannumber as string;
+    }
+
+    const result = await doProcessPMJJBYSBY({
+      customerId: customer.customerId,
+      debitAccountNumber: savingAccount,
+      insuranceCompany: scheme,
+      totalPremiumAmount: premiumDetails?.totalPremium ?? 0,
+      nomineeName: nominee.nomineeName,
+      nomineeRelationCode: Number(nominee.relation),
+      nomineeDob: nominee.nomineeDob,
+      guardianName: nomineeIsMinor ? nominee.guardianName : '',
+      guardianRelationCode: nomineeIsMinor ? Number(nominee.guardianRelation) : 0,
+      nomineeIsMinor,
+      ruralOrUrban: ruralOrUrban === 'Urban' ? 'U' : 'R',
+    });
+    return result.referenceNumber;
+  };
+
+  const handleOtpComplete = async (otp: string) => {
+    setApiError('');
+
+    // Step 1 — validate OTP. On failure stay on the OTP screen so the user can re-enter.
+    try {
+      await validateOtp(customer.mobileNo, otp, 'PMYSCHEMEOTP');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'OTP verification failed');
+      throw err;
+    }
+
+    // Step 2 — process enrollment. Failures here move to the result screen.
+    setLoading(true);
+    try {
+      const refNo = await enroll();
       setOperationResult({
         status: 'success',
         title: 'Enrollment Successful!',
         message: `You've been enrolled in ${scheme}. The premium will be auto-debited from ${acc?.label ?? 'your account'}${acc?.branchName ? ` (${acc.branchName})` : ''} as per schedule.`,
-        refNo: result.referenceNumber,
+        refNo,
       });
       setStep('result');
     } catch (err) {
@@ -290,41 +281,6 @@ export default function PMSocial() {
   if (step === 'form') return (
     <>
       <div className="flow-content">
-        {(scheme === 'PMJJBY' || scheme === 'PMSBY') && (
-          <div className="card" style={{ borderColor: '#c5d6f5', background: '#f0f4fb' }}>
-            <div className="card-title" style={{ fontSize: 13 }}>
-              <span className="card-icon">📋</span>Scheme Details
-              <span className={`scheme-badge scheme-${scheme}`} style={{ marginLeft: 'auto' }}>
-                {scheme}
-              </span>
-            </div>
-
-            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', marginBottom: 10 }}>
-              {SCHEME_INFO[scheme].name}
-            </p>
-
-            <div className="summary-row">
-              <span className="summary-key">Annual Premium</span>
-              <span className="summary-val">{annualPremiumLabel}</span>
-            </div>
-
-            {premiumLoading && (
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-                Loading premium details…
-              </p>
-            )}
-
-            {premiumDetails && (
-              <div className="summary-row">
-                <span className="summary-key">First Premium Amount (Pro Rata)</span>
-                <span className="summary-val">
-                  ₹{premiumDetails.firstPremium.toLocaleString('en-IN')}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
         <div className="card">
           <div className="card-title">
             <span className="card-icon">✏️</span>Enrollment Details
@@ -441,11 +397,22 @@ export default function PMSocial() {
           <div className="summary-row"><span className="summary-key">Scheme</span><span className="summary-val">{SCHEME_INFO[scheme].name}</span></div>
           <div className="summary-row"><span className="summary-key">Debit Account</span><span className="summary-val"><AccountDisplay account={acc} /></span></div>
           <div className="summary-row"><span className="summary-key">Annual Premium</span><span className="summary-val">{annualPremiumLabel}</span></div>
+          {premiumLoading && (scheme === 'PMJJBY' || scheme === 'PMSBY') && (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading premium details…</p>
+          )}
           {premiumDetails && (scheme === 'PMJJBY' || scheme === 'PMSBY') && (
-            <div className="summary-row">
-              <span className="summary-key">First Premium Amount (Pro Rata)</span>
-              <span className="summary-val">₹{premiumDetails.firstPremium.toLocaleString('en-IN')}</span>
-            </div>
+            <>
+              <div className="summary-row">
+                <span className="summary-key">First Premium Amount (Pro Rata)</span>
+                <span className="summary-val">₹{premiumDetails.firstPremium.toLocaleString('en-IN')}</span>
+              </div>
+              {premiumDetails.nextDebitWindow && (
+                <div className="summary-row">
+                  <span className="summary-key">Next Premium Debit Window</span>
+                  <span className="summary-val">{premiumDetails.nextDebitWindow}</span>
+                </div>
+              )}
+            </>
           )}
           {scheme === 'PMAPY' && (
             <>
@@ -490,14 +457,18 @@ export default function PMSocial() {
         <div className="card otp-screen">
           <div className="card-title" style={{ justifyContent: 'center' }}><span className="card-icon">📱</span>OTP Verification</div>
           <p className="otp-subtitle">Enter the 5-digit OTP sent to your registered mobile number to complete enrollment</p>
-          {apiError && <p className="form-error">⚠ {apiError}</p>}
           <OTPInput onComplete={handleOtpComplete} />
           {loading && <p style={{ marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>Verifying…</p>}
-          <p className="resend-text">Didn't receive OTP? <span className="resend-link">Resend OTP</span></p>
+          {resendMsg && <p className="form-hint" style={{ color: 'var(--success)' }}>{resendMsg}</p>}
+          {apiError && <p className="form-error" style={{ marginTop: 10 }}>⚠ {apiError}</p>}
+          <p className="resend-text">
+            Didn't receive OTP?{' '}
+            <button type="button" className="resend-link" onClick={resendOtp}>Resend OTP</button>
+          </p>
         </div>
       </div>
       <Actions>
-        <button className="btn btn-secondary" onClick={() => setStep('confirm')}>← Back</button>
+        <button className="btn btn-secondary" onClick={() => { setApiError(''); setResendMsg(''); setStep('confirm'); }}>← Back</button>
         <button type="button" className="btn btn-secondary" onClick={resetToServiceHome}>Cancel</button>
       </Actions>
     </>

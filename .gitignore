@@ -16,6 +16,10 @@ dist-ssr
 .env.development
 .env.production
 
+# SSL private keys — never commit
+deploy/ssl/private.key
+deploy/ssl/*.key
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

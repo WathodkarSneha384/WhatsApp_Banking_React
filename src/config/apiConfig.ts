@@ -23,6 +23,10 @@ function envOrDefault(name: string, fallback: string): string {
   return value || fallback;
 }
 
+function envOptional(name: string): string {
+  return import.meta.env[name]?.trim() || '';
+}
+
 export const apiConfig = {
   apiBase: resolveApiBase(),
   bank: envOrDefault('VITE_BANK_CODE', '068'),
@@ -31,6 +35,8 @@ export const apiConfig = {
   username: envOrDefault('VITE_API_USERNAME', 'MOBILE'),
   password: envOrDefault('VITE_API_PASSWORD', '95700e3a92830ae20ce0bddb23a2c1178f96017d70362572be90e293598c6126'),
   channel: envOrDefault('VITE_API_CHANNEL', 'WB'),
+  // Optional — when set, session expiry redirects here after trying to close the webview.
+  whatsappReturnUrl: envOptional('VITE_WHATSAPP_RETURN_URL'),
 } as const;
 
 /** Dev-only fallbacks when URL params are omitted (npm run dev). */

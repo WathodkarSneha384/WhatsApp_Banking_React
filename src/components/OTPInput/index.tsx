@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 
 interface OTPInputProps {
-  onComplete: (otp: string) => void;
+  onComplete: (otp: string) => void | Promise<void>;
   length?: number;
 }
 
@@ -9,13 +9,23 @@ export default function OTPInput({ onComplete, length = 5 }: OTPInputProps) {
   const [digits, setDigits] = useState<string[]>(Array(length).fill(''));
   const refs = Array.from({ length }, () => useRef<HTMLInputElement>(null));
 
+  const reset = () => {
+    setDigits(Array(length).fill(''));
+    refs[0].current?.focus();
+  };
+
+  const submit = (otp: string) => {
+    // If verification fails, clear the boxes so the user can re-enter the OTP.
+    Promise.resolve(onComplete(otp)).catch(() => reset());
+  };
+
   const handle = (i: number, val: string) => {
     if (!/^\d*$/.test(val)) return;
     const next = [...digits];
     next[i] = val.slice(-1);
     setDigits(next);
     if (val && i < length - 1) refs[i + 1].current?.focus();
-    if (next.every(d => d)) onComplete(next.join(''));
+    if (next.every(d => d)) submit(next.join(''));
   };
 
   const handleKey = (i: number, e: React.KeyboardEvent) => {
@@ -31,7 +41,7 @@ export default function OTPInput({ onComplete, length = 5 }: OTPInputProps) {
     setDigits(next);
     const focusIdx = Math.min(pasted.length, length - 1);
     refs[focusIdx].current?.focus();
-    if (pasted.length === length) onComplete(pasted);
+    if (pasted.length === length) submit(pasted);
   };
 
   return (

@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { buildHomePath } from '../utils/linkParams';
+import { apiConfig } from '../config/apiConfig';
 
 export const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const SESSION_KEY = 'wa_banking_session_start';
@@ -9,10 +8,26 @@ export function clearSessionTimer() {
   sessionStorage.removeItem(SESSION_KEY);
 }
 
-export function useSessionTimeout(active: boolean) {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+/**
+ * End the banking session. Tries to close the in-app browser/webview first.
+ * Redirects to WhatsApp only when VITE_WHATSAPP_RETURN_URL is configured.
+ */
+export function exitOnSessionExpiry() {
+  clearSessionTimer();
 
+  try {
+    window.close();
+  } catch {
+    // ignore — close may be blocked outside script-opened windows
+  }
+
+  const returnUrl = apiConfig.whatsappReturnUrl;
+  if (returnUrl) {
+    window.location.replace(returnUrl);
+  }
+}
+
+export function useSessionTimeout(active: boolean) {
   useEffect(() => {
     if (!active) return;
 
@@ -24,19 +39,16 @@ export function useSessionTimeout(active: boolean) {
 
     const elapsed = Date.now() - Number(start);
     const remaining = SESSION_TIMEOUT_MS - elapsed;
-    const expiredPath = buildHomePath(searchParams, { session: 'expired' });
 
     if (remaining <= 0) {
-      clearSessionTimer();
-      navigate(expiredPath, { replace: true });
+      exitOnSessionExpiry();
       return;
     }
 
     const timer = setTimeout(() => {
-      clearSessionTimer();
-      navigate(expiredPath, { replace: true });
+      exitOnSessionExpiry();
     }, remaining);
 
     return () => clearTimeout(timer);
-  }, [active, navigate, searchParams]);
+  }, [active]);
 }

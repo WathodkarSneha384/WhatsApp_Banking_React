@@ -1432,8 +1432,11 @@
   line-height: 1.25;
 }
 
-.bank-app .summary-val .account-display {
+.bank-app .summary-val .account-display,
+.bank-app .sumrow .v .account-display {
   align-items: flex-end;
+  width: 100%;
+  text-align: right;
 }
 
 .bank-app .radio-option.account-radio-option {

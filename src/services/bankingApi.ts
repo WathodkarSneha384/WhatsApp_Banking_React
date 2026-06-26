@@ -458,6 +458,8 @@ export interface PPSCreateResponse {
   errorMsg: string;
 }
 
+export type PpsProcessMode = 'V' | 'P';
+
 export async function createPPSChequeEntry(input: {
   accountNo: string;
   chequeNo: string;
@@ -465,13 +467,24 @@ export async function createPPSChequeEntry(input: {
   payeeName: string;
   issueDate: string;
   mobileNo: string;
+  ppsProcess: PpsProcessMode;
+  chequeSeries?: string;
 }): Promise<PPSCreateResponse> {
-  const { accountNo, chequeNo, chequeAmount, payeeName, issueDate, mobileNo } = input;
+  const {
+    accountNo,
+    chequeNo,
+    chequeAmount,
+    payeeName,
+    issueDate,
+    mobileNo,
+    ppsProcess,
+    chequeSeries = '0',
+  } = input;
   const timeStamp = generateTimestamp();
   console.log('Creating PPS Cheque Entry with:', {
     accountNo,
     chequeNo,
-
+    ppsProcess,
   });
   const checkSum = generateChecksum(
     SECRET_KEY,
@@ -498,7 +511,9 @@ export async function createPPSChequeEntry(input: {
       issueDate,
       channel: CHANNEL,
       payeeName,
+      chequeSeries,
       mobileNo,
+      ppsProcess,
     },
   );
 

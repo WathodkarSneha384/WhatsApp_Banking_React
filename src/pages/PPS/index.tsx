@@ -37,9 +37,13 @@ type FormErrors = Partial<Record<keyof EntryForm, string>>;
 
 function OtpBoxes({
   onComplete,
+  onResend,
+  mobileLast3,
   disabled,
 }: {
   onComplete: (otp: string) => void | Promise<void>;
+  onResend: () => Promise<void>;
+  mobileLast3: string;
   disabled?: boolean;
 }) {
   const OTP_LENGTH = 5;
@@ -48,6 +52,19 @@ function OtpBoxes({
   const [resendMsg, setResendMsg] = useState('');
   const refs = Array.from({ length: OTP_LENGTH }, () => useRef<HTMLInputElement>(null));
 
+  const reset = () => {
+    setDigits(Array(OTP_LENGTH).fill(''));
+    refs[0].current?.focus();
+  };
+
+  const submit = (otp: string) => {
+    setVerifying(true);
+    // Clear boxes on failure so the user can re-enter the OTP.
+    Promise.resolve(onComplete(otp))
+      .catch(() => reset())
+      .finally(() => setVerifying(false));
+  };
+
   const handleInput = (i: number, val: string) => {
     if (disabled || verifying) return;
     const clean = val.replace(/\D/g, '').slice(-1);
@@ -55,10 +72,7 @@ function OtpBoxes({
     next[i] = clean;
     setDigits(next);
     if (clean && i < OTP_LENGTH - 1) refs[i + 1].current?.focus();
-    if (next.every(d => d)) {
-      setVerifying(true);
-      Promise.resolve(onComplete(next.join(''))).finally(() => setVerifying(false));
-    }
+    if (next.every(d => d)) submit(next.join(''));
   };
 
   const handleKey = (i: number, e: React.KeyboardEvent) => {
@@ -71,9 +85,17 @@ function OtpBoxes({
     e.preventDefault();
     const next = pasted.split('').concat(Array(OTP_LENGTH).fill('')).slice(0, OTP_LENGTH);
     setDigits(next);
-    if (pasted.length === OTP_LENGTH) {
-      setVerifying(true);
-      Promise.resolve(onComplete(pasted)).finally(() => setVerifying(false));
+    if (pasted.length === OTP_LENGTH) submit(pasted);
+  };
+
+  const handleResend = async () => {
+    setResendMsg('');
+    reset();
+    try {
+      await onResend();
+      setResendMsg('A new OTP has been sent ✓');
+    } catch (err) {
+      setResendMsg(err instanceof Error ? err.message : 'Failed to resend OTP');
     }
   };
 
@@ -83,7 +105,7 @@ function OtpBoxes({
         <span className="ic">📱</span>OTP Verification
       </div>
       <p className="card-sub" style={{ marginBottom: 0 }}>
-        Enter the 5-digit OTP sent to your registered mobile number ••210
+        Enter the 5-digit OTP sent to your registered mobile number ••{mobileLast3}
       </p>
       <div className="otp-boxes">
         {digits.map((d, i) => (
@@ -104,7 +126,7 @@ function OtpBoxes({
       <p className="otp-state">{verifying ? 'Verifying…' : resendMsg}</p>
       <p className="resend">
         Didn't receive OTP?{' '}
-        <button type="button" onClick={() => setResendMsg('A new OTP has been sent ✓')}>Resend OTP</button>
+        <button type="button" onClick={handleResend}>Resend OTP</button>
       </p>
     </div>
   );
@@ -172,7 +194,11 @@ export default function PPS() {
       else if (issue > latest) e.issueDate = 'Issue date cannot be more than 3 months in the future';
     }
 
-    if (!form.payeeName.trim()) e.payeeName = 'Payee name is required';
+    if (!form.payeeName.trim()) {
+      e.payeeName = 'Payee name is required';
+    } else if (!/^[A-Za-z\s]+$/.test(form.payeeName.trim())) {
+      e.payeeName = 'Payee name must contain only letters and spaces';
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -239,21 +265,22 @@ export default function PPS() {
     setLoading(true);
     setApiError('');
     try {
-      const result = await createPPSChequeEntry({
+      const entryPayload = {
         accountNo: form.accountNo,
         chequeNo: form.chequeNo.trim(),
         chequeAmount: form.chequeAmount.trim(),
         payeeName: form.payeeName.trim(),
         issueDate: form.issueDate,
         mobileNo: customer.mobileNo,
-      });
-      const generatedRef = 'PPS' + Date.now().toString().slice(-8);
+      };
+
+      await createPPSChequeEntry({ ...entryPayload, ppsProcess: 'V' });
+      const result = await createPPSChequeEntry({ ...entryPayload, ppsProcess: 'P' });
       setPpsStatus(result.resStatus);
       setOperationResult({
         status: 'success',
         title: 'PPS Entry Submitted!',
         message: 'Your Positive Payment details have been registered. The cheque will be validated before payment processing.',
-        refNo: generatedRef,
       });
       setStep('result');
     } catch (err) {
@@ -464,8 +491,13 @@ export default function PPS() {
     if (step === 'otp') {
       return (
         <div className="card">
-          {apiError && <p className="ferr" style={{ marginBottom: 12 }}>⚠ {apiError}</p>}
-          <OtpBoxes onComplete={handleOtpComplete} disabled={loading} />
+          <OtpBoxes
+            onComplete={handleOtpComplete}
+            onResend={() => sendOtp(customer.mobileNo, 'PPSCREATE')}
+            mobileLast3={customer.mobileNo.slice(-3)}
+            disabled={loading}
+          />
+          {apiError && <p className="ferr" style={{ marginTop: 12, textAlign: 'center' }}>⚠ {apiError}</p>}
         </div>
       );
     }
@@ -541,7 +573,7 @@ export default function PPS() {
     if (step === 'otp') {
       return (
         <Actions>
-          <button type="button" className="btn btn-secondary" onClick={() => setStep('confirm')}>← Back</button>
+          <button type="button" className="btn btn-secondary" onClick={() => { setApiError(''); setStep('confirm'); }}>← Back</button>
           <button type="button" className="btn btn-secondary" onClick={resetToServiceHome}>Cancel</button>
         </Actions>
       );
@@ -549,12 +581,12 @@ export default function PPS() {
     if (step === 'submit') {
       return (
         <Actions>
-          <button type="button" className="btn btn-secondary" onClick={() => setStep('otp')} disabled={loading}>← Back</button>
+          <button type="button" className="btn btn-secondary" onClick={() => { setApiError(''); setStep('otp'); }} disabled={loading}>← Back</button>
           <button type="button" className="btn btn-primary" disabled={loading || !otpVerified} onClick={submitPpsEntry}>
             {loading ? 'Submitting…' : 'Submit PPS Entry →'}
           </button>
           {apiError && <p className="ferr" style={{ marginTop: 12 }}>⚠ {apiError}</p>}
-          <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
+          <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={() => restart('entry')}>
             Cancel
           </button>
         </Actions>
