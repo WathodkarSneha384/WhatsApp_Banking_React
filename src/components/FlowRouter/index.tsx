@@ -59,7 +59,7 @@ const serviceRoutes: Record<ServiceType, ServiceConfig> = {
     label: 'Open Fixed Deposit',
     title: 'Open Fixed Deposit',
     subtitle: 'Open Fixed Deposit',
-    steps: ['FD Details', 'Review', 'Verify OTP', 'Done'],
+    steps: ['FD Details', 'Review', 'Verify OTP', 'Submit', 'Done'],
     icon: '🏦',
     desc: 'Open a fixed deposit and earn assured returns on your savings.',
   },

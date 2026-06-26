@@ -29,8 +29,8 @@ import { useRelations } from '../../hooks/useRelations';
 import { getInsufficientBalanceError } from '../../utils/accountBalance';
 
 type NomineeSource = 'existing' | 'new' | 'no';
-type Step = 'form' | 'confirm' | 'otp' | 'result';
-const STEP_NUM: Record<Step, number> = { form: 1, confirm: 2, otp: 3, result: 4 };
+type Step = 'form' | 'confirm' | 'otp' | 'submit' | 'result';
+const STEP_NUM: Record<Step, number> = { form: 1, confirm: 2, otp: 3, submit: 4, result: 5 };
 
 interface OperationResult {
   status: 'success' | 'error';
@@ -123,6 +123,7 @@ export default function OpenFD() {
   const [existingNominee, setExistingNominee] = useState<any>(null);
   const [nomineeLoading, setNomineeLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [otpVerified, setOtpVerified] = useState(false);
   const otpCountdown = useOtpCountdown(step === 'otp');
   const nomineeIsMinor = nominee.nomineeDob ? (calcAge(nominee.nomineeDob) ?? 18) < 18 : false;
   const canCalculateMaturity =
@@ -283,6 +284,7 @@ const {
   const sendOtpAndProceed = async () => {
     setLoading(true);
     setApiError('');
+    setOtpVerified(false);
     try {
       await sendOtp(customer.mobileNo, 'TDACCOUNTOPEN');
       setStep('otp');
@@ -292,18 +294,23 @@ const {
       setLoading(false);
     }
   };
+
   const handleOtpComplete = async (otp: string) => {
     setApiError('');
-
     try {
-      // 1. Verify OTP
-      await validateOtp(
-        customer.mobileNo,
-        otp,
-        'TDACCOUNTOPEN'
-      );
+      await validateOtp(customer.mobileNo, otp, 'TDACCOUNTOPEN');
+      setOtpVerified(true);
+      setStep('submit');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'OTP verification failed');
+      throw err;
+    }
+  };
 
-      // 2. Open FD after OTP success
+  const handleFinalSubmit = async () => {
+    setLoading(true);
+    setApiError('');
+    try {
       const response = await openFDAccount({
         customerCode: customer.customerId,
         depositAmount: form.depositAmount,
@@ -341,9 +348,9 @@ const {
 
         nomineeisMinor: 'N',
 
-        nomineeName: form.nomineeSource === 'existing'?existingNominee.nomineeName : nominee.nomineeName,
-        nomineeDateOfBirth: form.nomineeSource === 'existing'?existingNominee.nomineeDob : nominee.nomineeDob,
-        nomineeRelation: form.nomineeSource === 'existing'?existingNominee.relation : nominee.relation,
+        nomineeName: form.nomineeSource === 'existing' ? existingNominee.nomineeName : nominee.nomineeName,
+        nomineeDateOfBirth: form.nomineeSource === 'existing' ? existingNominee.nomineeDob : nominee.nomineeDob,
+        nomineeRelation: form.nomineeSource === 'existing' ? existingNominee.relation : nominee.relation,
 
         guardianName: nomineeIsMinor ? nominee.guardianName : '',
         guardianDateOfBirth: nomineeIsMinor ? nominee.guardianDob : '',
@@ -367,6 +374,8 @@ const {
         message,
       });
       setStep('result');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -445,6 +454,43 @@ const {
   const interestEarnedLabel = getInterestEarnedLabel(form.interestPayMode);
 
   const { relations } = useRelations('pmyrelation');
+
+  const fdReviewSummary = (
+    <>
+      <div className="summary-row"><span className="summary-key">Debit Account</span><span className="summary-val"><AccountDisplay account={acc} /></span></div>
+      <div className="summary-row"><span className="summary-key">Deposit Amount</span><span className="summary-val">₹ {Number(form.depositAmount).toLocaleString('en-IN')}</span></div>
+      <div className="summary-row"><span className="summary-key">Deposit Type</span><span className="summary-val">{form.depositType}</span></div>
+      <div className="summary-row"><span className="summary-key">Renewal</span><span className="summary-val">{form.renewalRequired}</span></div>
+      <div className="summary-row"><span className="summary-key">Interest Pay Mode</span><span className="summary-val">{form.interestPayMode}</span></div>
+      <div className="summary-row"><span className="summary-key">Period</span><span className="summary-val">{form.depositPeriod} {form.periodType}</span></div>
+      {maturityData && <>
+        <div className="summary-row"><span className="summary-key">Maturity Date</span><span className="summary-val">{formatDDMMYYYY(maturityData.maturityDate)}</span></div>
+        <div className="summary-row"><span className="summary-key">{interestEarnedLabel}</span><span className="summary-val">₹ {maturityData.interestAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
+        <div className="summary-row"><span className="summary-key">Maturity Amount</span><span className="summary-val">₹ {maturityData.maturityAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
+      </>}
+      <div className="summary-row"><span className="summary-key">Interest Rate</span><span className="summary-val">{maturityData?.interestRate != null ? `${maturityData.interestRate}% p.a.` : '—'}</span></div>
+      <div className="divider" />
+      <div className="summary-row"><span className="summary-key">Nominee</span><span className="summary-val">{form.nomineeSource === 'existing'
+        ? 'Account Nominee'
+        : form.nomineeSource === 'new'
+          ? 'New Nominee'
+          : 'Nominee Not Required'}</span></div>
+      {form.nomineeSource === 'new' && <>
+        <div className="summary-row"><span className="summary-key">Nominee Name</span><span className="summary-val">{nominee.nomineeName}</span></div>
+        <div className="summary-row"><span className="summary-key">Nominee DOB</span><span className="summary-val">{new Date(nominee.nomineeDob).toLocaleDateString('en-IN')}</span></div>
+        <div className="summary-row"><span className="summary-key">Relationship</span><span className="summary-val">{relationLabel(relations, nominee.relation)}</span></div>
+      </>}
+      {nomineeIsMinor && (
+        <>
+          <div className="divider" />
+          <div className="section-heading">Guardian Details</div>
+          <div className="summary-row"><span className="summary-key">Guardian Name</span><span className="summary-val">{nominee.guardianName}</span></div>
+          <div className="summary-row"><span className="summary-key">Guardian DOB</span><span className="summary-val">{formatDDMMYYYY(nominee.guardianDob)}</span></div>
+          <div className="summary-row"><span className="summary-key">Guardian Relation</span><span className="summary-val">{relationLabel(relations, nominee.guardianRelation)}</span></div>
+        </>
+      )}
+    </>
+  );
 
   if (step === 'result' && operationResult) {
     return (
@@ -723,38 +769,7 @@ const {
       </div>
       <div className="card">
         <div className="card-title"><span className="card-icon">🏦</span>FD Details</div>
-        <div className="summary-row"><span className="summary-key">Debit Account</span><span className="summary-val"><AccountDisplay account={acc} /></span></div>
-        <div className="summary-row"><span className="summary-key">Deposit Amount</span><span className="summary-val">₹ {Number(form.depositAmount).toLocaleString('en-IN')}</span></div>
-        <div className="summary-row"><span className="summary-key">Deposit Type</span><span className="summary-val">{form.depositType}</span></div>
-        <div className="summary-row"><span className="summary-key">Renewal</span><span className="summary-val">{form.renewalRequired}</span></div>
-        <div className="summary-row"><span className="summary-key">Interest Pay Mode</span><span className="summary-val">{form.interestPayMode}</span></div>
-        <div className="summary-row"><span className="summary-key">Period</span><span className="summary-val">{form.depositPeriod} {form.periodType}</span></div>
-        {maturityData && <>
-          <div className="summary-row"><span className="summary-key">Maturity Date</span><span className="summary-val">{formatDDMMYYYY(maturityData.maturityDate)}</span></div>
-          <div className="summary-row"><span className="summary-key">{interestEarnedLabel}</span><span className="summary-val">₹ {maturityData.interestAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
-          <div className="summary-row"><span className="summary-key">Maturity Amount</span><span className="summary-val">₹ {maturityData.maturityAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></div>
-        </>}
-        <div className="summary-row"><span className="summary-key">Interest Rate</span><span className="summary-val">{maturityData?.interestRate != null ? `${maturityData.interestRate}% p.a.` : '—'}</span></div>
-        <div className="divider" />
-        <div className="summary-row"><span className="summary-key">Nominee</span><span className="summary-val">{form.nomineeSource === 'existing'
-          ? 'Account Nominee'
-          : form.nomineeSource === 'new'
-            ? 'New Nominee'
-            : 'Nominee Not Required'}</span></div>
-        {form.nomineeSource === 'new' && <>
-          <div className="summary-row"><span className="summary-key">Nominee Name</span><span className="summary-val">{nominee.nomineeName}</span></div>
-          <div className="summary-row"><span className="summary-key">Nominee DOB</span><span className="summary-val">{new Date(nominee.nomineeDob).toLocaleDateString('en-IN')}</span></div>
-          <div className="summary-row"><span className="summary-key">Relationship</span><span className="summary-val">{relationLabel(relations, nominee.relation)}</span></div>
-        </>}
-        {nomineeIsMinor && (
-          <>
-            <div className="divider" />
-            <div className="section-heading">Guardian Details</div>
-            <div className="summary-row"><span className="summary-key">Guardian Name</span><span className="summary-val">{nominee.guardianName}</span></div>
-            <div className="summary-row"><span className="summary-key">Guardian DOB</span><span className="summary-val">{formatDDMMYYYY(nominee.guardianDob)}</span></div>
-            <div className="summary-row"><span className="summary-key">Guardian Relation</span><span className="summary-val">{relationLabel(relations, nominee.guardianRelation)}</span></div>
-          </>
-        )}
+        {fdReviewSummary}
       </div>
     </div>
       <Actions>
@@ -788,7 +803,7 @@ const {
           onComplete={async (otp) => {
             if (otpCountdown.expired) {
               setApiError('OTP has expired. Please tap Resend OTP.');
-              return;
+              throw new Error('OTP expired');
             }
             setLoading(true);
             try {
@@ -817,6 +832,36 @@ const {
       <Actions>
         <button className="btn btn-secondary" onClick={() => setStep('confirm')}>← Back</button>
         <button type="button" className="btn btn-secondary" onClick={resetToServiceHome}>Cancel</button>
+      </Actions>
+    </>
+  );
+
+  /* ── FINAL SUBMIT ── */
+  if (step === 'submit') return (
+    <>
+      <div className="flow-content">
+        <div className="alert alert-warning">
+          <span>⚠️</span>
+          <span>OTP verified. Review once more and submit to open your Fixed Deposit.</span>
+        </div>
+        {apiError && <div className="alert alert-warning"><span>⚠️</span><span>{apiError}</span></div>}
+        <div className="card">
+          <div className="card-title"><span className="card-icon">📤</span>Final Submission</div>
+          <p className="card-sub" style={{ marginBottom: 12 }}>Once submitted, the deposit amount will be debited from your account.</p>
+          {fdReviewSummary}
+        </div>
+      </div>
+      <Actions>
+        <div className="btn-row">
+          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('otp')} disabled={loading}>← Back</button>
+          <button className="btn btn-primary" style={{ flex: 2 }} disabled={loading || !otpVerified}
+            onClick={handleFinalSubmit}>
+            {loading ? 'Submitting…' : 'Final Submit →'}
+          </button>
+        </div>
+        <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
+          Cancel
+        </button>
       </Actions>
     </>
   );
