@@ -26,6 +26,7 @@ import AccountDisplay from '../../components/AccountDisplay';
 import { openFDAccount, sendOtp, validateOtp, verifyExistingNominees } from '../../services/bankingApi';
 import { relationLabel } from '../../utils/relationLabel';
 import { useRelations } from '../../hooks/useRelations';
+import { getInsufficientBalanceError } from '../../utils/accountBalance';
 
 type NomineeSource = 'existing' | 'new' | 'no';
 type Step = 'form' | 'confirm' | 'otp' | 'result';
@@ -383,6 +384,10 @@ const {
       e.depositPeriod = 'Enter a valid deposit period';
     if (!form.nomineeSource) e.nomineeSource = 'Please select nominee option';
 
+    const selectedAccount = accounts.find(a => a.value === form.savingAccount);
+    const balanceError = getInsufficientBalanceError(selectedAccount, Number(form.depositAmount));
+    if (balanceError) e.savingAccount = balanceError;
+
     const ne: NomineeFieldErrors = form.nomineeSource === 'new'
       ? validateNomineeFields(nominee)
       : {};
@@ -427,6 +432,7 @@ const {
   };
 
   const acc = accounts.find(a => a.value === form.savingAccount);
+  const debitBalanceError = getInsufficientBalanceError(acc, Number(form.depositAmount));
   const interestModes = getInterestPayModeOptions(
     form.depositType as 'Simple' | 'Compound' | '',
     form.renewalRequired,
@@ -478,7 +484,9 @@ const {
             onChange={v => set('savingAccount', v)}
           />
           {accountsLoading && <p className="form-hint">Loading accounts…</p>}
-          {errors.savingAccount && <p className="form-error">⚠ {errors.savingAccount}</p>}
+          {(errors.savingAccount || debitBalanceError) && (
+            <p className="form-error">⚠ {errors.savingAccount || debitBalanceError}</p>
+          )}
         </div>
 
         <div className="form-group">
@@ -699,7 +707,7 @@ const {
       </div>
     </div>
       <Actions>
-        <button className="btn btn-primary" onClick={handleReview}>
+        <button className="btn btn-primary" disabled={!!debitBalanceError} onClick={handleReview}>
           Review →
         </button>
       </Actions>
@@ -753,7 +761,7 @@ const {
         <div className="btn-row">
           <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('form')}>← Edit</button>
           <button className="btn btn-primary" style={{ flex: 2 }} disabled={loading}
-            onClick={sendOtpAndProceed}>
+            onClick={() => { if (validate()) sendOtpAndProceed(); }}>
             {loading ? 'Sending OTP…' : 'Confirm & Get OTP →'}
           </button>
         </div>

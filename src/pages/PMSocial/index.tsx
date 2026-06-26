@@ -25,6 +25,7 @@ import {
   type PmapyInstallmentFrequency,
 } from '../../utils/pmPremium';
 import { relationLabel } from '../../utils/relationLabel';
+import { getInsufficientBalanceError } from '../../utils/accountBalance';
 
 type RuralOrUrban = 'Rural' | 'Urban';
 type Step = 'form' | 'confirm' | 'otp' | 'result';
@@ -139,6 +140,13 @@ export default function PMSocial() {
   if (!subservice) return null;
   const scheme = subservice;
 
+  const firstPremiumAmount =
+    (scheme === 'PMJJBY' || scheme === 'PMSBY')
+      ? premiumDetails?.firstPremium
+      : scheme === 'PMAPY'
+        ? apyPremium?.firstPremium
+        : undefined;
+
   const setNomineeField = (k: keyof NomineeFieldValues, v: string) => {
     setNominee(n => ({ ...n, [k]: v }));
     setNomineeErrors(e => ({ ...e, [k]: '' }));
@@ -154,6 +162,11 @@ export default function PMSocial() {
     if ((scheme === 'PMJJBY' || scheme === 'PMSBY') && !ruralOrUrban) {
       e.ruralOrUrban = 'Please select Rural or Urban';
     }
+
+    const selectedAccount = accounts.find(a => a.value === savingAccount);
+    const balanceError = getInsufficientBalanceError(selectedAccount, firstPremiumAmount);
+    if (balanceError) e.savingAccount = balanceError;
+
     setFormErrors(e);
     if (Object.keys(e).length > 0) return false;
 
@@ -163,6 +176,7 @@ export default function PMSocial() {
   };
 
   const acc = accounts.find(a => a.value === savingAccount);
+  const debitBalanceError = getInsufficientBalanceError(acc, firstPremiumAmount);
   const nomineeIsMinor = nominee.nomineeDob ? (calcAge(nominee.nomineeDob) ?? 18) < 18 : false;
 
   const nomineeReviewRows = (
@@ -293,13 +307,6 @@ export default function PMSocial() {
         ? `₹${apyPremium.totalPremium.toLocaleString('en-IN')} / year`
         : SCHEME_INFO[scheme].premium;
 
-  const firstPremiumAmount =
-    (scheme === 'PMJJBY' || scheme === 'PMSBY')
-      ? premiumDetails?.firstPremium
-      : scheme === 'PMAPY'
-        ? apyPremium?.firstPremium
-        : undefined;
-
   if (step === 'result' && operationResult) {
     return (
       <ServiceResultScreen
@@ -333,7 +340,9 @@ export default function PMSocial() {
               onChange={v => setSavingAccount(v)}
             />
             {accountsLoading && <p className="form-hint">Loading accounts…</p>}
-            {formErrors.savingAccount && <p className="form-error">⚠ {formErrors.savingAccount}</p>}
+            {(formErrors.savingAccount || debitBalanceError) && (
+              <p className="form-error">⚠ {formErrors.savingAccount || debitBalanceError}</p>
+            )}
           </div>
 
           {scheme === 'PMAPY' && (
@@ -426,7 +435,7 @@ export default function PMSocial() {
       <Actions>
         <button
           className="btn btn-primary"
-          disabled={!apyEligible}
+          disabled={!apyEligible || !!debitBalanceError}
           onClick={() => {
             if (validateForm() && apyEligible) {
               setStep('confirm');
