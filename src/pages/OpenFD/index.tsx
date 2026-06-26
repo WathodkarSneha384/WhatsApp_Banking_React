@@ -219,7 +219,7 @@ const {
     }
   }, [existingNominee, form.nomineeSource]);
 
-  useEffect(() => {
+useEffect(() => {
   if (form.nomineeSource === 'existing' && accountNominee) {
     setNominee({
       nomineeName: accountNominee.nomineeName || '',
@@ -229,10 +229,6 @@ const {
       guardianDob: '',
       guardianRelation: '',
     });
-  }
-
-  if (form.nomineeSource === 'new') {
-    setNominee(EMPTY_NOMINEE);
   }
 }, [form.nomineeSource, accountNominee]);
 

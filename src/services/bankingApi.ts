@@ -807,8 +807,8 @@ export async function openFDAccount(input: {
     repayAccountNumber: input.repayAccountNumber,
 
     closeonMaturity: input.closeonMaturity,
-    autoRenewal: input.autoRenewal,
-    renewalType: input.renewalType,
+    autoRenewal: input.renewalType,
+    
 
     depositType: input.depositType,
     interestPayMode: input.interestPayMode,
