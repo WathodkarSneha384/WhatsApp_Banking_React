@@ -20,16 +20,18 @@ import AccountDisplay from '../../components/AccountDisplay';
 import { formatDDMMYYYY } from '../../utils/date';
 import {
   PENSION_AMOUNT_OPTIONS,
+  fetchPmJjbyPreInsAmount,
   getPmapyInstallmentAmount,
   parsePmSchemePremiumFromApi,
   type PmapyInstallmentFrequency,
+  type PmSchemePremiumFromApi,
 } from '../../utils/pmPremium';
 import { relationLabel } from '../../utils/relationLabel';
 import { getInsufficientBalanceError } from '../../utils/accountBalance';
 
 type RuralOrUrban = 'Rural' | 'Urban';
-type Step = 'form' | 'confirm' | 'otp' | 'result';
-const STEP_NUM: Record<Step, number> = { form: 1, confirm: 2, otp: 3, result: 4 };
+type Step = 'form' | 'confirm' | 'otp' | 'submit' | 'result';
+const STEP_NUM: Record<Step, number> = { form: 1, confirm: 2, otp: 3, submit: 4, result: 5 };
 
 interface OperationResult {
   status: 'success' | 'error';
@@ -82,22 +84,70 @@ export default function PMSocial() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
-  const [resendMsg, setResendMsg] = useState('');
+  const [otpVerified, setOtpVerified] = useState(false);
   const [operationResult, setOperationResult] = useState<OperationResult | null>(null);
   const resetToServiceHome = useServiceFlowReset('pmsocial');
 
-  const insuranceScheme = subservice === 'PMJJBY' || subservice === 'PMSBY' ? subservice : null;
+  const insuranceScheme = subservice === 'PMSBY' ? 'PMSBY' : null;
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
   const { premium: premiumDetails, loading: premiumLoading } = useInsurancePremium(insuranceScheme);
   const { relations } = useRelations('pmyrelation');
-  const [apyPremium, setApyPremium] = useState<{ totalPremium: number; firstPremium: number } | null>(null);
+  const [jjbyPremium, setJjbyPremium] = useState<PmSchemePremiumFromApi | null>(null);
+  const [jjbyPremiumLoading, setJjbyPremiumLoading] = useState(false);
+  const [jjbyMessage, setJjbyMessage] = useState('');
+  const [jjbyEligible, setJjbyEligible] = useState(true);
+  const [apyPremium, setApyPremium] = useState<PmSchemePremiumFromApi | null>(null);
   const [apyPremiumLoading, setApyPremiumLoading] = useState(false);
   const [apyMessage, setApyMessage] = useState('');
   const [apyEligible, setApyEligible] = useState(true);
 
 
   useEffect(() => {
+    const fetchJjbyPremium = async () => {
+      if (subservice !== 'PMJJBY') {
+        setJjbyPremium(null);
+        return;
+      }
+
+      if (!customer.customerId) {
+        setJjbyPremium(null);
+        return;
+      }
+
+      setJjbyPremiumLoading(true);
+      try {
+        const response = await fetchPmJjbyPreInsAmount(customer.customerId);
+
+        if (!response) {
+          setJjbyPremium(null);
+          return;
+        }
+
+        if (response.errorCode !== '00') {
+          setJjbyEligible(false);
+          setJjbyPremium(null);
+          setJjbyMessage(response.errorMsg || 'Unable to fetch premium details');
+          return;
+        }
+
+        setJjbyEligible(true);
+        setJjbyMessage('');
+        setJjbyPremium(parsePmSchemePremiumFromApi(response));
+      } finally {
+        setJjbyPremiumLoading(false);
+      }
+    };
+
+    fetchJjbyPremium();
+  }, [subservice, customer.customerId]);
+
+  useEffect(() => {
     const fetchApyPremium = async () => {
+      if (subservice !== 'PMAPY') {
+        setApyPremium(null);
+        return;
+      }
+
       if (!savingAccount || !pensionAmount || !installmentFreq) {
         setApyPremium(null);
         return;
@@ -119,33 +169,25 @@ export default function PMSocial() {
         if (response.errorCode !== '00') {
           setApyEligible(false);
           setApyPremium(null);
-          setApyMessage(response.errorMsg);
+          setApyMessage(response.errorMsg || 'Unable to fetch premium details');
           return;
         }
 
         setApyEligible(true);
-        setApyMessage(response.errorMsg || '');
-        const premium = parsePmSchemePremiumFromApi(response);
-        setApyPremium(premium);
+        setApyMessage('');
+        setApyPremium(parsePmSchemePremiumFromApi(response));
       } finally {
         setApyPremiumLoading(false);
       }
     };
 
     fetchApyPremium();
-  }, [savingAccount, pensionAmount, installmentFreq]);
+  }, [subservice, savingAccount, pensionAmount, installmentFreq]);
 
   useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step, setCurrentStep]);
 
   if (!subservice) return null;
   const scheme = subservice;
-
-  const firstPremiumAmount =
-    (scheme === 'PMJJBY' || scheme === 'PMSBY')
-      ? premiumDetails?.firstPremium
-      : scheme === 'PMAPY'
-        ? apyPremium?.firstPremium
-        : undefined;
 
   const setNomineeField = (k: keyof NomineeFieldValues, v: string) => {
     setNominee(n => ({ ...n, [k]: v }));
@@ -162,11 +204,6 @@ export default function PMSocial() {
     if ((scheme === 'PMJJBY' || scheme === 'PMSBY') && !ruralOrUrban) {
       e.ruralOrUrban = 'Please select Rural or Urban';
     }
-
-    const selectedAccount = accounts.find(a => a.value === savingAccount);
-    const balanceError = getInsufficientBalanceError(selectedAccount, firstPremiumAmount);
-    if (balanceError) e.savingAccount = balanceError;
-
     setFormErrors(e);
     if (Object.keys(e).length > 0) return false;
 
@@ -176,7 +213,6 @@ export default function PMSocial() {
   };
 
   const acc = accounts.find(a => a.value === savingAccount);
-  const debitBalanceError = getInsufficientBalanceError(acc, firstPremiumAmount);
   const nomineeIsMinor = nominee.nomineeDob ? (calcAge(nominee.nomineeDob) ?? 18) < 18 : false;
 
   const nomineeReviewRows = (
@@ -199,6 +235,7 @@ export default function PMSocial() {
   const sendOtpAndProceed = async () => {
     setLoading(true);
     setApiError('');
+    setOtpVerified(false);
     try {
       await sendOtp(customer.mobileNo, 'PMYSCHEMEOTP');
       setStep('otp');
@@ -206,17 +243,6 @@ export default function PMSocial() {
       setApiError(err instanceof Error ? err.message : 'Failed to send OTP');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const resendOtp = async () => {
-    setApiError('');
-    setResendMsg('');
-    try {
-      await sendOtp(customer.mobileNo, 'PMYSCHEMEOTP');
-      setResendMsg('A new OTP has been sent ✓');
-    } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Failed to resend OTP');
     }
   };
 
@@ -232,8 +258,8 @@ export default function PMSocial() {
           installmentFreq === 'Monthly'
             ? 'M'
             : installmentFreq === 'Quarterly'
-            ? 'Q'
-            : 'H',
+              ? 'Q'
+              : 'H',
         insurancePremiumAmount: Number(apyPremium?.firstPremium ?? 0),
         nomineeName: nominee.nomineeName,
         nomineedob: nominee.nomineeDob,
@@ -251,8 +277,10 @@ export default function PMSocial() {
     const result = await doProcessPMJJBYSBY({
       customerId: customer.customerId,
       debitAccountNumber: savingAccount,
-      insuranceCompany: scheme,
-      totalPremiumAmount: premiumDetails?.totalPremium ?? 0,
+      insuranceCompany: scheme as 'PMJJBY' | 'PMSBY',
+      totalPremiumAmount: scheme === 'PMJJBY'
+        ? (jjbyPremium?.totalPremium ?? 0)
+        : (premiumDetails?.totalPremium ?? 0),
       nomineeName: nominee.nomineeName,
       nomineeRelationCode: Number(nominee.relation),
       nomineeDob: nominee.nomineeDob,
@@ -266,17 +294,19 @@ export default function PMSocial() {
 
   const handleOtpComplete = async (otp: string) => {
     setApiError('');
-
-    // Step 1 — validate OTP. On failure stay on the OTP screen so the user can re-enter.
     try {
       await validateOtp(customer.mobileNo, otp, 'PMYSCHEMEOTP');
+      setOtpVerified(true);
+      setStep('submit');
     } catch (err) {
       setApiError(err instanceof Error ? err.message : 'OTP verification failed');
       throw err;
     }
+  };
 
-    // Step 2 — process enrollment. Failures here move to the result screen.
+  const handleSubmit = async () => {
     setLoading(true);
+    setApiError('');
     try {
       const refNo = await enroll();
       setOperationResult({
@@ -300,12 +330,108 @@ export default function PMSocial() {
     }
   };
 
+  const annualPremiumAmount =
+    scheme === 'PMSBY' && premiumDetails
+      ? premiumDetails.totalPremium
+      : scheme === 'PMJJBY' && jjbyPremium
+        ? jjbyPremium.totalPremium
+        : scheme === 'PMAPY' && apyPremium
+          ? apyPremium.totalPremium
+          : null;
+
   const annualPremiumLabel =
-    (scheme === 'PMJJBY' || scheme === 'PMSBY') && premiumDetails
-      ? `₹${premiumDetails.totalPremium.toLocaleString('en-IN')} / year`
-      : scheme === 'PMAPY' && apyPremium
-        ? `₹${apyPremium.totalPremium.toLocaleString('en-IN')} / year`
-        : SCHEME_INFO[scheme].premium;
+    annualPremiumAmount != null
+      ? `₹${annualPremiumAmount.toLocaleString('en-IN')} / year`
+      : SCHEME_INFO[scheme].premium;
+
+  const firstPremiumAmount =
+    scheme === 'PMSBY'
+      ? premiumDetails?.firstPremium
+      : scheme === 'PMJJBY'
+        ? jjbyPremium?.firstPremium
+        : scheme === 'PMAPY'
+          ? apyPremium?.firstPremium
+          : undefined;
+
+  const pmapyInstallmentAmount = scheme === 'PMAPY' ? apyPremium?.firstPremium : undefined;
+
+  const balanceError = getInsufficientBalanceError(acc, firstPremiumAmount);
+
+  const nextInstallmentDate =
+    scheme === 'PMJJBY'
+      ? jjbyPremium?.nextInstallmentDate
+      : scheme === 'PMAPY'
+        ? apyPremium?.nextInstallmentDate
+        : scheme === 'PMSBY'
+          ? premiumDetails?.nextDebitWindow
+          : undefined;
+
+  const premiumDetailsSection = scheme === 'PMAPY' ? (
+    <>
+      <div className="summary-row">
+        <span className="summary-key">Installment Amount</span>
+        <span className="summary-val">
+          {apyPremiumLoading ? 'Loading…' : pmapyInstallmentAmount != null
+            ? `₹${pmapyInstallmentAmount.toLocaleString('en-IN')}`
+            : '—'}
+        </span>
+      </div>
+      {nextInstallmentDate && (
+        <div className="summary-row">
+          <span className="summary-key">Next Installment Date</span>
+          <span className="summary-val">{nextInstallmentDate}</span>
+        </div>
+      )}
+    </>
+  ) : (
+    <>
+      <div className="summary-row">
+        <span className="summary-key">Annual Premium</span>
+        <span className="summary-val">
+          {jjbyPremiumLoading && scheme === 'PMJJBY'
+            ? 'Loading…'
+            : annualPremiumLabel}
+        </span>
+      </div>
+      {firstPremiumAmount != null && (
+        <div className="summary-row">
+          <span className="summary-key">First Premium Amount (Pro Rata)</span>
+          <span className="summary-val">₹{firstPremiumAmount.toLocaleString('en-IN')}</span>
+        </div>
+      )}
+      {nextInstallmentDate && (
+        <div className="summary-row">
+          <span className="summary-key">Next Installment Date</span>
+          <span className="summary-val">{nextInstallmentDate}</span>
+        </div>
+      )}
+    </>
+  );
+
+  const reviewSummary = (
+    <>
+      <div className="summary-row summary-row-account"><span className="summary-key">Debit Account</span><span className="summary-val"><AccountDisplay account={acc} /></span></div>
+      <div className="summary-row"><span className="summary-key">Scheme</span><span className="summary-val">{SCHEME_INFO[scheme].name}</span></div>
+      <div className="divider" />
+      <div className="section-heading">Premium Details</div>
+      {premiumDetailsSection}
+      {scheme === 'PMAPY' && (
+        <>
+          <div className="summary-row"><span className="summary-key">Pension Amount</span><span className="summary-val">₹{Number(pensionAmount).toLocaleString('en-IN')} / month</span></div>
+          <div className="summary-row"><span className="summary-key">Installment Frequency</span><span className="summary-val">{installmentFreq}</span></div>
+        </>
+      )}
+      <div className="divider" />
+      <div className="section-heading">Nominee Details</div>
+      {nomineeReviewRows}
+      {(scheme === 'PMJJBY' || scheme === 'PMSBY') && ruralOrUrban && (
+        <>
+          <div className="divider" />
+          <div className="summary-row"><span className="summary-key">Area Type</span><span className="summary-val">{ruralOrUrban}</span></div>
+        </>
+      )}
+    </>
+  );
 
   if (step === 'result' && operationResult) {
     return (
@@ -314,6 +440,7 @@ export default function PMSocial() {
         title={operationResult.title}
         message={operationResult.message}
         refNo={operationResult.refNo}
+        refLabel="Policy Reference Number"
         onCancel={resetToServiceHome}
       />
     );
@@ -323,6 +450,79 @@ export default function PMSocial() {
   if (step === 'form') return (
     <>
       <div className="flow-content">
+        {(scheme === 'PMJJBY' || scheme === 'PMSBY') && (
+          <div className="card" style={{ borderColor: '#c5d6f5', background: '#f0f4fb' }}>
+            <div className="card-title" style={{ fontSize: 13 }}>
+              <span className="card-icon">📋</span>Scheme Details
+              <span className={`scheme-badge scheme-${scheme}`} style={{ marginLeft: 'auto' }}>
+                {scheme}
+              </span>
+            </div>
+
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', marginBottom: 10 }}>
+              {SCHEME_INFO[scheme].name}
+            </p>
+
+            <div className="summary-row">
+              <span className="summary-key">Annual Premium</span>
+              <span className="summary-val">
+                {scheme === 'PMJJBY' && jjbyPremiumLoading ? 'Loading…' : annualPremiumLabel}
+              </span>
+            </div>
+
+            {scheme === 'PMSBY' && premiumLoading && (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                Loading premium details…
+              </p>
+            )}
+
+            {scheme === 'PMJJBY' && jjbyPremiumLoading && (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                Loading premium details…
+              </p>
+            )}
+
+            {scheme === 'PMJJBY' && jjbyPremium && (
+              <div className="summary-row">
+                <span className="summary-key">First Premium Amount (Pro Rata)</span>
+                <span className="summary-val">
+                  ₹{jjbyPremium.firstPremium.toLocaleString('en-IN')}
+                </span>
+              </div>
+            )}
+
+            {scheme === 'PMJJBY' && jjbyPremium?.nextInstallmentDate && (
+              <div className="summary-row">
+                <span className="summary-key">Next Installment Date</span>
+                <span className="summary-val">{jjbyPremium.nextInstallmentDate}</span>
+              </div>
+            )}
+
+            {scheme === 'PMSBY' && premiumDetails && (
+              <>
+                <div className="summary-row">
+                  <span className="summary-key">First Premium Amount (Pro Rata)</span>
+                  <span className="summary-val">
+                    ₹{premiumDetails.firstPremium.toLocaleString('en-IN')}
+                  </span>
+                </div>
+                {premiumDetails.nextDebitWindow && (
+                  <div className="summary-row">
+                    <span className="summary-key">Next Installment Date</span>
+                    <span className="summary-val">{premiumDetails.nextDebitWindow}</span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {scheme === 'PMJJBY' && !jjbyEligible && jjbyMessage && (
+              <p className="form-error" style={{ marginTop: 6 }}>
+                {jjbyMessage}
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="card">
           <div className="card-title">
             <span className="card-icon">✏️</span>Enrollment Details
@@ -340,8 +540,9 @@ export default function PMSocial() {
               onChange={v => setSavingAccount(v)}
             />
             {accountsLoading && <p className="form-hint">Loading accounts…</p>}
-            {(formErrors.savingAccount || debitBalanceError) && (
-              <p className="form-error">⚠ {formErrors.savingAccount || debitBalanceError}</p>
+            {formErrors.savingAccount && <p className="form-error">⚠ {formErrors.savingAccount}</p>}
+            {!formErrors.savingAccount && balanceError && (
+              <p className="form-error">⚠ {balanceError}</p>
             )}
           </div>
 
@@ -371,27 +572,26 @@ export default function PMSocial() {
               </div>
 
               {apyPremiumLoading && (
-                <p className="form-hint">Loading premium details…</p>
+                <p className="form-hint">Loading installment amount…</p>
               )}
 
               {apyPremium && (
                 <>
                   <div className="summary-row">
-                    <span className="summary-key">Annual Premium</span>
-                    <span className="summary-val">₹{apyPremium.totalPremium.toLocaleString('en-IN')} / year</span>
-                  </div>
-                  <div className="summary-row">
-                    <span className="summary-key">First Premium Amount (Pro Rata)</span>
+                    <span className="summary-key">Installment Amount</span>
                     <span className="summary-val">₹{apyPremium.firstPremium.toLocaleString('en-IN')}</span>
                   </div>
+                  {apyPremium.nextInstallmentDate && (
+                    <div className="summary-row">
+                      <span className="summary-key">Next Installment Date</span>
+                      <span className="summary-val">{apyPremium.nextInstallmentDate}</span>
+                    </div>
+                  )}
                 </>
               )}
 
-              {apyMessage && (
-                <p
-                  className={apyEligible ? 'form-success' : 'form-error'}
-                  style={{ marginTop: 6 }}
-                >
+              {!apyEligible && apyMessage && (
+                <p className="form-error" style={{ marginTop: 6 }}>
                   {apyMessage}
                 </p>
               )}
@@ -435,9 +635,10 @@ export default function PMSocial() {
       <Actions>
         <button
           className="btn btn-primary"
-          disabled={!apyEligible || !!debitBalanceError}
+          disabled={Boolean(balanceError) || (scheme === 'PMJJBY' && !jjbyEligible) || (scheme === 'PMAPY' && !apyEligible)}
           onClick={() => {
-            if (validateForm() && apyEligible) {
+            if (balanceError) return;
+            if (validateForm() && ((scheme !== 'PMJJBY' && scheme !== 'PMAPY') || (scheme === 'PMJJBY' ? jjbyEligible : apyEligible))) {
               setStep('confirm');
             }
           }}
@@ -462,46 +663,14 @@ export default function PMSocial() {
             <span className="card-icon">✅</span>Review Enrollment
             <span className={`scheme-badge scheme-${scheme}`} style={{ marginLeft: 'auto' }}>{scheme}</span>
           </div>
-          <div className="summary-row"><span className="summary-key">Scheme</span><span className="summary-val">{SCHEME_INFO[scheme].name}</span></div>
-          <div className="summary-row"><span className="summary-key">Debit Account</span><span className="summary-val"><AccountDisplay account={acc} /></span></div>
-          <div className="summary-row"><span className="summary-key">Annual Premium</span><span className="summary-val">{annualPremiumLabel}</span></div>
-          {premiumLoading && (scheme === 'PMJJBY' || scheme === 'PMSBY') && (
-            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading premium details…</p>
-          )}
-          {firstPremiumAmount != null && (
-            <div className="summary-row">
-              <span className="summary-key">First Premium Amount (Pro Rata)</span>
-              <span className="summary-val">₹{firstPremiumAmount.toLocaleString('en-IN')}</span>
-            </div>
-          )}
-          {premiumDetails?.nextDebitWindow && (scheme === 'PMJJBY' || scheme === 'PMSBY') && (
-            <div className="summary-row">
-              <span className="summary-key">Next Premium Debit Window</span>
-              <span className="summary-val">{premiumDetails.nextDebitWindow}</span>
-            </div>
-          )}
-          {scheme === 'PMAPY' && (
-            <>
-              <div className="summary-row"><span className="summary-key">Pension Amount</span><span className="summary-val">₹{Number(pensionAmount).toLocaleString('en-IN')} / month</span></div>
-              <div className="summary-row"><span className="summary-key">Installment Frequency</span><span className="summary-val">{installmentFreq}</span></div>
-            </>
-          )}
-          <div className="divider" />
-          <div className="section-heading">Nominee Details</div>
-          {nomineeReviewRows}
-          {(scheme === 'PMJJBY' || scheme === 'PMSBY') && ruralOrUrban && (
-            <>
-              <div className="divider" />
-              <div className="summary-row"><span className="summary-key">Area Type</span><span className="summary-val">{ruralOrUrban}</span></div>
-            </>
-          )}
+          {reviewSummary}
         </div>
       </div>
       <Actions>
         <div className="btn-row">
           <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('form')}>← Edit</button>
-          <button className="btn btn-primary" style={{ flex: 2 }} disabled={loading}
-            onClick={() => { if (validateForm()) sendOtpAndProceed(); }}>
+          <button className="btn btn-primary" style={{ flex: 2 }} disabled={loading || Boolean(balanceError)}
+            onClick={() => { if (!balanceError && validateForm()) sendOtpAndProceed(); }}>
             {loading ? 'Sending OTP…' : 'Confirm & Get OTP →'}
           </button>
         </div>
@@ -520,19 +689,48 @@ export default function PMSocial() {
         <div className="card otp-screen">
           <div className="card-title" style={{ justifyContent: 'center' }}><span className="card-icon">📱</span>OTP Verification</div>
           <p className="otp-subtitle">Enter the 5-digit OTP sent to your registered mobile number to complete enrollment</p>
+          {apiError && <p className="form-error">⚠ {apiError}</p>}
           <OTPInput onComplete={handleOtpComplete} />
-          {loading && <p style={{ marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>Verifying…</p>}
-          {resendMsg && <p className="form-hint" style={{ color: 'var(--success)' }}>{resendMsg}</p>}
           {apiError && <p className="form-error" style={{ marginTop: 10 }}>⚠ {apiError}</p>}
           <p className="resend-text">
             Didn't receive OTP?{' '}
-            <button type="button" className="resend-link" onClick={resendOtp}>Resend OTP</button>
+            <button type="button" className="resend-link" onClick={sendOtpAndProceed}>Resend OTP</button>
           </p>
         </div>
       </div>
       <Actions>
-        <button className="btn btn-secondary" onClick={() => { setApiError(''); setResendMsg(''); setStep('confirm'); }}>← Back</button>
+        <button className="btn btn-secondary" onClick={() => { setApiError(''); setStep('confirm'); }}>← Back</button>
         <button type="button" className="btn btn-secondary" onClick={resetToServiceHome}>Cancel</button>
+      </Actions>
+    </>
+  );
+
+  /* ── FINAL SUBMIT ── */
+  if (step === 'submit') return (
+    <>
+      <div className="flow-content">
+        <div className="alert alert-warning">
+          <span>⚠️</span>
+          <span>OTP verified. Review once more and submit to complete enrollment.</span>
+        </div>
+        {apiError && <div className="alert alert-warning"><span>⚠️</span><span>{apiError}</span></div>}
+        <div className="card">
+          <div className="card-title"><span className="card-icon">📤</span>Final Submission</div>
+          <p className="card-sub" style={{ marginBottom: 12 }}>Once submitted, the premium will be debited as per schedule.</p>
+          {reviewSummary}
+        </div>
+      </div>
+      <Actions>
+        <div className="btn-row">
+          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('otp')} disabled={loading}>← Back</button>
+          <button className="btn btn-primary" style={{ flex: 2 }} disabled={loading || !otpVerified}
+            onClick={handleSubmit}>
+            {loading ? 'Submitting…' : 'Final Submit →'}
+          </button>
+        </div>
+        <button type="button" className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={resetToServiceHome}>
+          Cancel
+        </button>
       </Actions>
     </>
   );

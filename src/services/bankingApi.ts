@@ -309,12 +309,14 @@ export async function fetchInsurancePremium(
   try {
     const timeStamp = generateTimestamp();
     const checkSum = generateChecksum(
-      SECRET_KEY, VENDOR, 'getpreinsamount', USERNAME, PASSWORD, scheme
+      SECRET_KEY, VENDOR, 'getpreinsamount', USERNAME, PASSWORD, scheme,
     );
 
     const data = await postEndpoint<BankApiResponse & {
       totalAmount?: string | number;
       insurancePremiumAmount?: string | number;
+      siDate?: string;
+      siDatedate?: string;
     }>(
       'getpreinsamount',
       {
@@ -328,10 +330,12 @@ export async function fetchInsurancePremium(
 
     const totalPremium = Number(data.totalAmount ?? calculated.totalPremium);
     const firstPremium = Number(data.insurancePremiumAmount ?? calculated.firstPremium);
+    const nextDebitWindow =
+      data.siDate?.trim() || data.siDatedate?.trim() || calculated.nextDebitWindow;
     return {
       totalPremium: Number.isFinite(totalPremium) ? totalPremium : calculated.totalPremium,
       firstPremium: Number.isFinite(firstPremium) ? firstPremium : calculated.firstPremium,
-      nextDebitWindow: calculated.nextDebitWindow,
+      nextDebitWindow,
       source: 'api',
     };
   } catch {
@@ -932,7 +936,7 @@ export async function getAPYPreInsAmount(input: {
     debitAccountNo,
   );
 
-  const response = await postEndpoint(
+  return postEndpoint(
     'getAPYpreinsamount',
     {
       ...basePayload('getAPYpreinsamount', checkSum),
@@ -941,8 +945,36 @@ export async function getAPYPreInsAmount(input: {
       insuranceType,
       pensionAmount: pensionamount,
       insatllmentFreq,
-    }
+    },
   );
+}
 
-  return response;
+export async function getPMJJBYPreInsAmount(input: {
+  customerId: string;
+  debitAccountNo?: string;
+}): Promise<any> {
+  const { customerId, debitAccountNo } = input;
+  const scheme = 'PMJJBY';
+  const timeStamp = generateTimestamp();
+
+  const checkSum = debitAccountNo
+    ? generateChecksum(
+      SECRET_KEY, VENDOR, 'getpreinsamount', USERNAME, PASSWORD, scheme, debitAccountNo,
+    )
+    : generateChecksum(
+      SECRET_KEY, VENDOR, 'getpreinsamount', USERNAME, PASSWORD, scheme,
+    );
+
+  const payload: Record<string, unknown> = {
+    ...basePayload('getpreinsamount', checkSum),
+    timeStamp,
+    bank: BANK,
+    customerId,
+    insuranceType: scheme,
+    insuranceCoId: scheme,
+  };
+
+  if (debitAccountNo) payload.debitAccountNo = debitAccountNo;
+
+  return postEndpoint('getpreinsamount', payload, false);
 }

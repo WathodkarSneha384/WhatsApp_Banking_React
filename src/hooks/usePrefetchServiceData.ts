@@ -21,7 +21,7 @@ export function usePrefetchServiceData(
       prefetchPPSParameters();
     }
 
-    if (service === 'pmsocial' && (subservice === 'PMJJBY' || subservice === 'PMSBY')) {
+    if (service === 'pmsocial' && subservice === 'PMSBY') {
       prefetchInsurancePremium(subservice);
     }
   }, [active, service, subservice, customerId]);

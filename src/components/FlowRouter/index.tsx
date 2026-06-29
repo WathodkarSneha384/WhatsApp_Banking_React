@@ -50,7 +50,7 @@ const serviceRoutes: Record<ServiceType, ServiceConfig> = {
     label: 'PM Social Schemes',
     title: 'PM Social Scheme Enrollment',
     subtitle: 'PM Social Scheme Enrollment',
-    steps: ['Fill Details', 'Review', 'Verify OTP', 'Done'],
+    steps: ['Fill Details', 'Review', 'Verify OTP', 'Submit', 'Done'],
     icon: '🏛️',
     desc: 'Enroll in government insurance and pension schemes at very low premiums.',
   },

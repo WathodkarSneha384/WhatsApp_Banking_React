@@ -1,4 +1,4 @@
-import { getAPYPreInsAmount } from '../services/bankingApi';
+import { getAPYPreInsAmount, getPMJJBYPreInsAmount } from '../services/bankingApi';
 import type { PMSocialSubservice } from '../types';
 
 export interface InsurancePremiumDetails {
@@ -45,20 +45,56 @@ export type PmapyInstallmentFrequency = 'Monthly' | 'Quarterly' | 'Half Yearly';
 export interface PmSchemePremiumFromApi {
   totalPremium: number;
   firstPremium: number;
+  nextInstallmentDate?: string;
 }
 
 export function parsePmSchemePremiumFromApi(
-  data: { totalAmount?: string | number; insurancePremiumAmount?: string | number },
+  data: {
+    totalAmount?: string | number;
+    insurancePremiumAmount?: string | number;
+    siDate?: string;
+    siDatedate?: string;
+  },
   fallback?: { totalPremium: number; firstPremium: number },
 ): PmSchemePremiumFromApi | null {
   const totalPremium = Number(data.totalAmount);
   const firstPremium = Number(data.insurancePremiumAmount);
+  const hasTotal = Number.isFinite(totalPremium);
+  const hasInstallment = Number.isFinite(firstPremium);
 
-  if (!Number.isFinite(totalPremium) || !Number.isFinite(firstPremium)) {
+  if (!hasTotal && !hasInstallment) {
     return fallback ?? null;
   }
 
-  return { totalPremium, firstPremium };
+  const nextInstallmentDate =
+    data.siDate?.trim() || data.siDatedate?.trim() || undefined;
+
+  return {
+    totalPremium: hasTotal ? totalPremium : 0,
+    firstPremium: hasInstallment ? firstPremium : totalPremium,
+    nextInstallmentDate,
+  };
+}
+
+function toInstallmentFreqCode(frequency: PmapyInstallmentFrequency | ''): 'M' | 'Q' | 'H' | '' {
+  if (frequency === 'Monthly') return 'M';
+  if (frequency === 'Quarterly') return 'Q';
+  if (frequency === 'Half Yearly') return 'H';
+  return '';
+}
+
+export async function fetchPmJjbyPreInsAmount(customerId: string) {
+  try {
+    return await getPMJJBYPreInsAmount({ customerId });
+  } catch (error) {
+    return {
+      errorCode: '425',
+      status: '02',
+      errorMsg: error instanceof Error
+        ? error.message
+        : 'Failed to fetch premium amount',
+    };
+  }
 }
 
 export async function getPmapyInstallmentAmount(
@@ -70,15 +106,7 @@ export async function getPmapyInstallmentAmount(
     return null;
   }
 
-  const frequencyCode =
-    frequency === 'Monthly'
-      ? 'M'
-      : frequency === 'Quarterly'
-      ? 'Q'
-      : frequency === 'Half Yearly'
-      ? 'H'
-      : '';
-
+  const frequencyCode = toInstallmentFreqCode(frequency);
   if (!frequencyCode) {
     return null;
   }
@@ -91,12 +119,12 @@ export async function getPmapyInstallmentAmount(
       insatllmentFreq: frequencyCode,
     });
   } catch (error) {
-  return {
-    errorCode: '425',
-    status: '02',
-    errorMsg: error instanceof Error
-      ? error.message
-      : 'Failed to fetch installment amount',
-  };
-}
+    return {
+      errorCode: '425',
+      status: '02',
+      errorMsg: error instanceof Error
+        ? error.message
+        : 'Failed to fetch installment amount',
+    };
+  }
 }
