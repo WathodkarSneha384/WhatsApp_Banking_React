@@ -7,7 +7,6 @@ import { Stepper, Actions } from '../../components/ServiceShell';
 import { useAccounts } from '../../hooks/useAccounts';
 import { createPPSChequeEntry, sendOtp, validateOtp } from '../../services/api';
 import AccountDisplay from '../../components/AccountDisplay';
-import { toInputDate } from '../../utils/date';
 
 type Mode = 'entry' | 'view';
 type Step = 'select' | 'form' | 'confirm' | 'otp' | 'submit' | 'result';
@@ -132,7 +131,7 @@ function OtpBoxes({
 }
 
 export default function PPS() {
-  const { setCurrentStep, customer, serviceSubMode } = useFlow();
+  const { setCurrentStep, customer, serviceSubMode, branchCurrentDate } = useFlow();
   const [mode, setMode] = useState<Mode>('entry');
   const [step, setStep] = useState<Step>('form');
   const [form, setForm] = useState<EntryForm>({ accountNo: '', chequeNo: '', chequeAmount: '', issueDate: '', payeeName: '' });
@@ -212,16 +211,22 @@ export default function PPS() {
     return Object.keys(e).length === 0;
   };
   const getMinIssueDate = () => {
-    const date = new Date();
-    date.setMonth(date.getMonth() - 3);
-    return toInputDate(date);
-  };
+  if (!branchCurrentDate) return '';
 
-  const getMaxIssueDate = () => {
-    const date = new Date();
-    date.setMonth(date.getMonth() + 3);
-    return toInputDate(date);
-  };
+  const date = new Date(branchCurrentDate);
+  date.setMonth(date.getMonth() - 3);
+
+  return date.toISOString().split('T')[0];
+};
+
+const getMaxIssueDate = () => {
+  if (!branchCurrentDate) return '';
+
+  const date = new Date(branchCurrentDate);
+  date.setMonth(date.getMonth() + 3);
+
+  return date.toISOString().split('T')[0];
+};
 
   const restartEntryForm = () => {
     setMode('entry');
@@ -585,7 +590,7 @@ export default function PPS() {
 
         setReviewLoading(true);
         setApiError('');
-
+        //console.log('SysytemDAte===',)
         try {
           const payload = {
             accountNo: form.accountNo,

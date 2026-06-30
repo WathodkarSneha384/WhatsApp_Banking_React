@@ -12,6 +12,7 @@ interface FlowContextValue {
   setCurrentStep: (step: number) => void;
   subservice: PMSocialSubservice | null;
   serviceSubMode: string | null;
+  branchCurrentDate: string | null;
   customer: CustomerSession;
 }
 
@@ -26,6 +27,7 @@ const FlowContext = createContext<FlowContextValue>({
   setCurrentStep: () => {},
   subservice: null,
   serviceSubMode: null,
+  branchCurrentDate: null,
   customer: DEFAULT_CUSTOMER,
 });
 
@@ -33,16 +35,18 @@ export function FlowProvider({
   children,
   subservice = null,
   serviceSubMode = null,
+  branchCurrentDate = null,
   customer = DEFAULT_CUSTOMER,
 }: {
   children: ReactNode;
   subservice?: PMSocialSubservice | null;
   serviceSubMode?: string | null;
+  branchCurrentDate?: string | null;
   customer?: CustomerSession;
 }) {
   const [currentStep, setCurrentStep] = useState(1);
   return (
-    <FlowContext.Provider value={{ currentStep, setCurrentStep, subservice, serviceSubMode, customer }}>
+    <FlowContext.Provider value={{ currentStep, setCurrentStep, subservice, serviceSubMode, branchCurrentDate, customer }}>
       {children}
     </FlowContext.Provider>
   );
