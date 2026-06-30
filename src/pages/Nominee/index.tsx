@@ -45,7 +45,7 @@ export default function Nominee() {
   const [operationResult, setOperationResult] = useState<OperationResult | null>(null);
   const resetToServiceHome = useServiceFlowReset('nominee');
 
-  const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
+  const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null, 'DD,TD');
   const { relations } = useRelations('relation');
   const [nomineeExists, setNomineeExists] = useState<boolean | null>(null);
   const [nomineeData, setNomineeData] = useState<any[]>([]);

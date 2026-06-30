@@ -7,6 +7,27 @@ export function formatDDMMYYYY(value: string | Date): string {
   return `${dd}-${mm}-${yyyy}`;
 }
 
+/** Normalize API installment dates to DD-MM-YYYY for display. */
+export function formatInstallmentDisplayDate(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+
+  if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) return trimmed;
+
+  const isoDate = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDate) {
+    const [, yyyy, mm, dd] = isoDate;
+    return `${dd}-${mm}-${yyyy}`;
+  }
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+    const [dd, mm, yyyy] = trimmed.split('/');
+    return `${dd}-${mm}-${yyyy}`;
+  }
+
+  return formatDDMMYYYY(trimmed);
+}
+
 export function toInputDate(date: Date): string {
   return date.toISOString().split('T')[0];
 }

@@ -17,7 +17,7 @@ import { useInsurancePremium } from '../../hooks/useInsurancePremium';
 import type { PMSocialSubservice } from '../../types';
 import { doProcessAPYPolicy, doProcessPMJJBYSBY, sendOtp, validateOtp } from '../../services/api';
 import AccountDisplay from '../../components/AccountDisplay';
-import { formatDDMMYYYY } from '../../utils/date';
+import { formatInstallmentDisplayDate } from '../../utils/date';
 import {
   PENSION_AMOUNT_OPTIONS,
   fetchPmJjbyPreInsAmount,
@@ -84,6 +84,7 @@ export default function PMSocial() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [resendMsg, setResendMsg] = useState('');
   const [otpVerified, setOtpVerified] = useState(false);
   const [operationResult, setOperationResult] = useState<OperationResult | null>(null);
   const resetToServiceHome = useServiceFlowReset('pmsocial');
@@ -207,7 +208,7 @@ export default function PMSocial() {
     setFormErrors(e);
     if (Object.keys(e).length > 0) return false;
 
-    const ne = validateNomineeFields(nominee);
+    const ne = validateNomineeFields(nominee, { requireGuardianDob: false });
     setNomineeErrors(ne);
     return Object.keys(ne).length === 0;
   };
@@ -225,7 +226,6 @@ export default function PMSocial() {
           <div className="divider" />
           <div className="section-heading">Guardian Details</div>
           <div className="summary-row"><span className="summary-key">Guardian Name</span><span className="summary-val">{nominee.guardianName}</span></div>
-          <div className="summary-row"><span className="summary-key">Guardian DOB</span><span className="summary-val">{formatDDMMYYYY(nominee.guardianDob)}</span></div>
           <div className="summary-row"><span className="summary-key">Guardian Relation</span><span className="summary-val">{relationLabel(relations, nominee.guardianRelation)}</span></div>
         </>
       )}
@@ -235,12 +235,27 @@ export default function PMSocial() {
   const sendOtpAndProceed = async () => {
     setLoading(true);
     setApiError('');
+    setResendMsg('');
     setOtpVerified(false);
     try {
       await sendOtp(customer.mobileNo, 'PMYSCHEMEOTP');
       setStep('otp');
     } catch (err) {
       setApiError(err instanceof Error ? err.message : 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setResendMsg('');
+    setApiError('');
+    setLoading(true);
+    try {
+      await sendOtp(customer.mobileNo, 'PMYSCHEMEOTP');
+      setResendMsg('A new OTP has been sent ✓');
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to resend OTP');
     } finally {
       setLoading(false);
     }
@@ -355,15 +370,18 @@ export default function PMSocial() {
 
   const pmapyInstallmentAmount = scheme === 'PMAPY' ? apyPremium?.firstPremium : undefined;
 
+  const formatNextInstallmentDate = (value?: string) =>
+    value ? formatInstallmentDisplayDate(value) : undefined;
+
   const balanceError = getInsufficientBalanceError(acc, firstPremiumAmount);
 
   const nextInstallmentDate =
     scheme === 'PMJJBY'
-      ? jjbyPremium?.nextInstallmentDate
+      ? formatNextInstallmentDate(jjbyPremium?.nextInstallmentDate)
       : scheme === 'PMAPY'
-        ? apyPremium?.nextInstallmentDate
+        ? formatNextInstallmentDate(apyPremium?.nextInstallmentDate)
         : scheme === 'PMSBY'
-          ? premiumDetails?.nextDebitWindow
+          ? formatNextInstallmentDate(premiumDetails?.nextDebitWindow)
           : undefined;
 
   const premiumDetailsSection = scheme === 'PMAPY' ? (
@@ -494,7 +512,7 @@ export default function PMSocial() {
             {scheme === 'PMJJBY' && jjbyPremium?.nextInstallmentDate && (
               <div className="summary-row">
                 <span className="summary-key">Next Installment Date</span>
-                <span className="summary-val">{jjbyPremium.nextInstallmentDate}</span>
+                <span className="summary-val">{formatNextInstallmentDate(jjbyPremium.nextInstallmentDate)}</span>
               </div>
             )}
 
@@ -509,7 +527,7 @@ export default function PMSocial() {
                 {premiumDetails.nextDebitWindow && (
                   <div className="summary-row">
                     <span className="summary-key">Next Installment Date</span>
-                    <span className="summary-val">{premiumDetails.nextDebitWindow}</span>
+                    <span className="summary-val">{formatNextInstallmentDate(premiumDetails.nextDebitWindow)}</span>
                   </div>
                 )}
               </>
@@ -584,7 +602,7 @@ export default function PMSocial() {
                   {apyPremium.nextInstallmentDate && (
                     <div className="summary-row">
                       <span className="summary-key">Next Installment Date</span>
-                      <span className="summary-val">{apyPremium.nextInstallmentDate}</span>
+                      <span className="summary-val">{formatNextInstallmentDate(apyPremium.nextInstallmentDate)}</span>
                     </div>
                   )}
                 </>
@@ -606,6 +624,7 @@ export default function PMSocial() {
             errors={nomineeErrors}
             onChange={setNomineeField}
             relationType="pmyrelation"
+            showGuardianDob={false}
           />
 
           {(scheme === 'PMJJBY' || scheme === 'PMSBY') && (
@@ -691,15 +710,15 @@ export default function PMSocial() {
           <p className="otp-subtitle">Enter the 5-digit OTP sent to your registered mobile number to complete enrollment</p>
           {apiError && <p className="form-error">⚠ {apiError}</p>}
           <OTPInput onComplete={handleOtpComplete} />
-          {apiError && <p className="form-error" style={{ marginTop: 10 }}>⚠ {apiError}</p>}
+          {resendMsg && <p className="form-hint" style={{ color: 'var(--success)' }}>{resendMsg}</p>}
           <p className="resend-text">
             Didn't receive OTP?{' '}
-            <button type="button" className="resend-link" onClick={sendOtpAndProceed}>Resend OTP</button>
+            <button type="button" className="resend-link" onClick={handleResendOtp}>Resend OTP</button>
           </p>
         </div>
       </div>
       <Actions>
-        <button className="btn btn-secondary" onClick={() => { setApiError(''); setStep('confirm'); }}>← Back</button>
+        <button className="btn btn-secondary" onClick={() => { setApiError(''); setResendMsg(''); setStep('confirm'); }}>← Back</button>
         <button type="button" className="btn btn-secondary" onClick={resetToServiceHome}>Cancel</button>
       </Actions>
     </>

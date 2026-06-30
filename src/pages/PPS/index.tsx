@@ -132,7 +132,7 @@ function OtpBoxes({
 }
 
 export default function PPS() {
-  const { setCurrentStep, customer } = useFlow();
+  const { setCurrentStep, customer, serviceSubMode } = useFlow();
   const [mode, setMode] = useState<Mode>('entry');
   const [step, setStep] = useState<Step>('form');
   const [form, setForm] = useState<EntryForm>({ accountNo: '', chequeNo: '', chequeAmount: '', issueDate: '', payeeName: '' });
@@ -151,6 +151,22 @@ export default function PPS() {
   const curStep = STEP_NUM[step];
 
   useEffect(() => { setCurrentStep(curStep); }, [curStep, setCurrentStep]);
+
+  useEffect(() => {
+    const subMode = serviceSubMode?.trim().toLowerCase();
+    if (!subMode) return;
+
+    if (subMode === 'ss') {
+      setMode('view');
+      setStep('form');
+      return;
+    }
+
+    if (subMode === 'pe' || subMode === 'entry') {
+      setMode('entry');
+      setStep('form');
+    }
+  }, [serviceSubMode]);
 
   const setField = (k: keyof EntryForm, v: string) => {
     setForm(f => ({ ...f, [k]: v }));

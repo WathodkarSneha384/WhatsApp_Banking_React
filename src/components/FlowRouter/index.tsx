@@ -85,7 +85,7 @@ function LoadingView() {
 }
 
 export default function FlowRouter() {
-  const { service, subservice, status, error, customerId, mobileNo, customerName } = useServiceFlow();
+  const { service, subservice, serviceSubMode, status, error, customerId, mobileNo, customerName } = useServiceFlow();
   useSessionTimeout(status === 'ready');
   usePrefetchServiceData(status === 'ready', service, subservice, customerId);
 
@@ -99,6 +99,7 @@ export default function FlowRouter() {
           mobileNo: mobileNo ?? '',
           customerName: customerName ?? '',
         }}
+        serviceSubMode={serviceSubMode}
       >
         <Home />
       </FlowProvider>
@@ -127,6 +128,7 @@ export default function FlowRouter() {
   return (
     <FlowProvider
       subservice={subservice}
+      serviceSubMode={serviceSubMode}
       customer={{
         customerId: customerId ?? '',
         mobileNo: mobileNo ?? '',

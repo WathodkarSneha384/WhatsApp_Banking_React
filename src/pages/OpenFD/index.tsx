@@ -106,11 +106,6 @@ export default function OpenFD() {
     renewalRequired: '', interestPayMode: '', periodType: '', depositPeriod: '',
     nomineeSource: '',
   });
-  const accountNominee = {
-  nomineeName: '',
-  nomineeDob: '',
-  relation: 'SIS',
-};
   const [errors, setErrors] = useState<FDErrors>({});
   const [nominee, setNominee] = useState<NomineeFieldValues>(EMPTY_NOMINEE);
   const [nomineeErrors, setNomineeErrors] = useState<NomineeFieldErrors>({});
@@ -137,6 +132,7 @@ export default function OpenFD() {
 const {
   maturityData,
   loading: maturityLoading,
+  maturityError,
 } = useCalculateMaturity(
   canCalculateMaturity ? form.depositAmount : '',
   canCalculateMaturity
@@ -220,17 +216,17 @@ const {
   }, [existingNominee, form.nomineeSource]);
 
 useEffect(() => {
-  if (form.nomineeSource === 'existing' && accountNominee) {
+  if (form.nomineeSource === 'existing' && existingNominee) {
     setNominee({
-      nomineeName: accountNominee.nomineeName || '',
-      nomineeDob: accountNominee.nomineeDob || '',
-      relation: accountNominee.relation || '',
+      nomineeName: existingNominee.nomineeName || '',
+      nomineeDob: existingNominee.nomineeDob || '',
+      relation: existingNominee.relation || '',
       guardianName: '',
       guardianDob: '',
       guardianRelation: '',
     });
   }
-}, [form.nomineeSource, accountNominee]);
+}, [form.nomineeSource, existingNominee]);
 
   useEffect(() => {
     if (form.savingAccount) {
@@ -376,17 +372,30 @@ useEffect(() => {
   };
 
 
+  const depositAmountApiError =
+    maturityError?.field === 'depositAmount' ? maturityError.message : '';
+  const depositPeriodApiError =
+    maturityError?.field === 'depositPeriod' ? maturityError.message : '';
+
   const validate = (): boolean => {
     const e: FDErrors = {};
     if (!form.savingAccount) e.savingAccount = 'Please select an account';
-    if (!form.depositAmount.trim() || isNaN(Number(form.depositAmount)) || Number(form.depositAmount) < 1000)
-      e.depositAmount = 'Minimum deposit is ₹1,000';
+    if (!form.depositAmount.trim() || isNaN(Number(form.depositAmount)) || Number(form.depositAmount) <= 0)
+      e.depositAmount = 'Enter a valid deposit amount';
+    else if (depositAmountApiError) e.depositAmount = depositAmountApiError;
     if (!form.depositType) e.depositType = 'Please select deposit type';
     if (!form.renewalRequired) e.renewalRequired = 'Please select renewal option';
     if (!form.interestPayMode) e.interestPayMode = 'Please select interest pay mode';
     if (!form.periodType) e.periodType = 'Please select period type';
     if (!form.depositPeriod.trim() || isNaN(Number(form.depositPeriod)) || Number(form.depositPeriod) < 1)
       e.depositPeriod = 'Enter a valid deposit period';
+    else if (depositPeriodApiError) e.depositPeriod = depositPeriodApiError;
+    if (canCalculateMaturity && maturityLoading)
+      e.depositAmount = e.depositAmount || 'Calculating maturity amount…';
+    if (canCalculateMaturity && !maturityLoading && maturityError && !maturityError.field)
+      e.depositAmount = e.depositAmount || maturityError.message;
+    if (canCalculateMaturity && !maturityLoading && !maturityData && !maturityError)
+      e.depositAmount = e.depositAmount || 'Unable to verify deposit details. Please check your inputs.';
     if (!form.nomineeSource) e.nomineeSource = 'Please select nominee option';
 
     const selectedAccount = accounts.find(a => a.value === form.savingAccount);
@@ -453,7 +462,7 @@ useEffect(() => {
 
   const fdReviewSummary = (
     <>
-      <div className="summary-row"><span className="summary-key">Debit Account</span><span className="summary-val"><AccountDisplay account={acc} /></span></div>
+      <div className="summary-row summary-row-account"><span className="summary-key">Debit Account</span><span className="summary-val"><AccountDisplay account={acc} /></span></div>
       <div className="summary-row"><span className="summary-key">Deposit Amount</span><span className="summary-val">₹ {Number(form.depositAmount).toLocaleString('en-IN')}</span></div>
       <div className="summary-row"><span className="summary-key">Deposit Type</span><span className="summary-val">{form.depositType}</span></div>
       <div className="summary-row"><span className="summary-key">Renewal</span><span className="summary-val">{form.renewalRequired}</span></div>
@@ -467,10 +476,19 @@ useEffect(() => {
       <div className="summary-row"><span className="summary-key">Interest Rate</span><span className="summary-val">{maturityData?.interestRate != null ? `${maturityData.interestRate}% p.a.` : '—'}</span></div>
       <div className="divider" />
       <div className="summary-row"><span className="summary-key">Nominee</span><span className="summary-val">{form.nomineeSource === 'existing'
-        ? 'Account Nominee'
+        ? 'Existing Nominee'
         : form.nomineeSource === 'new'
           ? 'New Nominee'
           : 'Nominee Not Required'}</span></div>
+      {form.nomineeSource === 'existing' && existingNominee && <>
+        <div className="summary-row"><span className="summary-key">Nominee Name</span><span className="summary-val">{existingNominee.nomineeName}</span></div>
+        {existingNominee.nomineeDob && (
+          <div className="summary-row"><span className="summary-key">Nominee DOB</span><span className="summary-val">{new Date(existingNominee.nomineeDob).toLocaleDateString('en-IN')}</span></div>
+        )}
+        {existingNominee.relation && (
+          <div className="summary-row"><span className="summary-key">Relationship</span><span className="summary-val">{relationLabel(relations, existingNominee.relation)}</span></div>
+        )}
+      </>}
       {form.nomineeSource === 'new' && <>
         <div className="summary-row"><span className="summary-key">Nominee Name</span><span className="summary-val">{nominee.nomineeName}</span></div>
         <div className="summary-row"><span className="summary-key">Nominee DOB</span><span className="summary-val">{new Date(nominee.nomineeDob).toLocaleDateString('en-IN')}</span></div>
@@ -501,7 +519,7 @@ useEffect(() => {
       >
         {operationResult.status === 'success' && (
           <div className="ref-box" style={{ background: '#eef3fb', borderColor: '#c5d6f5', marginTop: 12 }}>
-            <div className="ref-label">Reference Number</div>
+            <div className="ref-label" style={{ color: 'var(--primary)', opacity: 0.85 }}>Reference Number</div>
             <div className="ref-value" style={{ color: 'var(--primary)', fontSize: 17 }}>{refNo}</div>
           </div>
         )}
@@ -535,13 +553,15 @@ useEffect(() => {
           <label className="form-label">Deposit Amount (₹) <span className="required">*</span></label>
           <input
             id="fd-depositAmount"
-            className={`form-input ${errors.depositAmount ? 'is-error' : ''}`}
-            placeholder="Minimum ₹1,000"
+            className={`form-input ${errors.depositAmount || depositAmountApiError ? 'is-error' : ''}`}
+            placeholder="Enter deposit amount"
             value={form.depositAmount}
             inputMode="decimal"
             onChange={e => set('depositAmount', e.target.value)}
           />
-          {errors.depositAmount && <p className="form-error">⚠ {errors.depositAmount}</p>}
+          {(errors.depositAmount || depositAmountApiError) && (
+            <p className="form-error">⚠ {errors.depositAmount || depositAmountApiError}</p>
+          )}
         </div>
 
         <div className="form-group">
@@ -618,7 +638,7 @@ useEffect(() => {
             <label className="form-label">Deposit Period <span className="required">*</span></label>
             <input
               id="fd-depositPeriod"
-              className={`form-input ${errors.depositPeriod ? 'is-error' : ''}`}
+              className={`form-input ${errors.depositPeriod || depositPeriodApiError ? 'is-error' : ''}`}
               placeholder={form.periodType === 'Days' ? 'e.g. 180' : 'e.g. 12'}
               value={form.depositPeriod}
               inputMode="numeric"
@@ -627,7 +647,9 @@ useEffect(() => {
             {form.periodType && (
               <p className="form-hint">Enter number of {form.periodType.toLowerCase()}</p>
             )}
-            {errors.depositPeriod && <p className="form-error">⚠ {errors.depositPeriod}</p>}
+            {(errors.depositPeriod || depositPeriodApiError) && (
+              <p className="form-error">⚠ {errors.depositPeriod || depositPeriodApiError}</p>
+            )}
           </div>
         </div>
 
@@ -649,7 +671,10 @@ useEffect(() => {
         {maturityLoading && (
           <p className="form-hint">Calculating maturity amount…</p>
         )}
-        {maturityData && (
+        {maturityError && !maturityError.field && !maturityLoading && (
+          <p className="form-error" style={{ marginTop: 8 }}>⚠ {maturityError.message}</p>
+        )}
+        {maturityData && !maturityError && (
           <div className="card fd-preview-card">
             <div className="card-title fd-preview-title">
               <span className="card-icon">📊</span>Maturity Preview
@@ -749,7 +774,14 @@ useEffect(() => {
       </div>
     </div>
       <Actions>
-        <button className="btn btn-primary" disabled={!!debitBalanceError} onClick={handleReview}>
+        <button
+          className="btn btn-primary"
+          disabled={
+            !!debitBalanceError
+            || (canCalculateMaturity && (maturityLoading || !!maturityError || !maturityData))
+          }
+          onClick={handleReview}
+        >
           Review →
         </button>
       </Actions>
@@ -770,7 +802,7 @@ useEffect(() => {
     </div>
       <Actions>
         <div className="btn-row">
-          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep('form')}>← Edit</button>
+          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => { setApiError(''); setStep('form'); }}>← Edit</button>
           <button className="btn btn-primary" style={{ flex: 2 }} disabled={loading}
             onClick={() => { if (validate()) sendOtpAndProceed(); }}>
             {loading ? 'Sending OTP…' : 'Confirm & Get OTP →'}
@@ -826,7 +858,7 @@ useEffect(() => {
       </div>
     </div>
       <Actions>
-        <button className="btn btn-secondary" onClick={() => setStep('confirm')}>← Back</button>
+        <button className="btn btn-secondary" onClick={() => { setApiError(''); setStep('confirm'); }}>← Back</button>
         <button type="button" className="btn btn-secondary" onClick={resetToServiceHome}>Cancel</button>
       </Actions>
     </>

@@ -7,6 +7,33 @@ import {
 
 export type { MaturityPreview };
 
+export type MaturityValidationField = 'depositAmount' | 'depositPeriod';
+
+export type MaturityValidationError = {
+  message: string;
+  field: MaturityValidationField | null;
+};
+
+function isMaturitySuccess(data: Record<string, unknown>): boolean {
+  const errorCode = String(data.errorCode ?? '');
+  const status = String(data.status ?? '');
+  return errorCode === '00' || status === '00' || data.result === 'success';
+}
+
+function getMaturityErrorField(
+  errorCode: string,
+): MaturityValidationField | null {
+  switch (errorCode) {
+    case '432':
+      return 'depositAmount';
+    case '431':
+    case '429':
+      return 'depositPeriod';
+    default:
+      return null;
+  }
+}
+
 function normalizeApiMaturity(
   data: Record<string, unknown>,
   input: {
@@ -15,7 +42,6 @@ function normalizeApiMaturity(
     periodType: 'Days' | 'Months';
     depositType: 'Simple' | 'Compound';
     interestPayMode: string;
-
   },
 ): MaturityPreview | null {
   const maturityAmount = Number(data.maturityAmount ?? data.MATURITYAMT);
@@ -23,11 +49,7 @@ function normalizeApiMaturity(
   const interestRate = Number(data.interestRate ?? data.INTRATE);
 
   if (!Number.isFinite(maturityAmount) || maturityAmount <= 0) {
-    return buildMaturityPreview({
-      ...input,
-      rate: Number.isFinite(interestRate) && interestRate > 0 ? interestRate : undefined,
-      maturityDateRaw: data.maturityDate ?? data.maturitydate,
-    });
+    return null;
   }
 
   const rate = Number.isFinite(interestRate) && interestRate > 0
@@ -61,6 +83,7 @@ export function useCalculateMaturity(
 ) {
   const [maturityData, setMaturityData] = useState<MaturityPreview | null>(null);
   const [loading, setLoading] = useState(false);
+  const [maturityError, setMaturityError] = useState<MaturityValidationError | null>(null);
 
   useEffect(() => {
     const amount = Number(depositAmount);
@@ -76,40 +99,61 @@ export function useCalculateMaturity(
       !renewalRequired ||
       !depositAmount.trim() ||
       Number.isNaN(amount) ||
-      amount < 1000 ||
+      amount <= 0 ||
       period <= 0
     ) {
       setMaturityData(null);
+      setMaturityError(null);
       setLoading(false);
       return;
     }
 
     let cancelled = false;
     setLoading(true);
-
-    const localPreview = buildMaturityPreview({
-      principal: amount,
-      period,
-      periodType,
-      depositType,
-      interestPayMode,
-    });
+    setMaturityError(null);
 
     calculateMaturity(amount, schemeCode, monthNum, dayNum, interestPayMode)
       .then((res) => {
         if (cancelled) return;
-        const normalized = normalizeApiMaturity(res as Record<string, unknown>, {
+
+        const data = res as Record<string, unknown>;
+        if (!isMaturitySuccess(data)) {
+          const errorCode = String(data.errorCode ?? '');
+          const message = String(
+            data.errorMsg || data.message || 'Unable to calculate maturity amount',
+          );
+          setMaturityData(null);
+          setMaturityError({
+            message,
+            field: getMaturityErrorField(errorCode),
+          });
+          return;
+        }
+
+        const normalized = normalizeApiMaturity(data, {
           principal: amount,
           period,
           periodType,
           depositType,
           interestPayMode,
         });
-        setMaturityData(normalized ?? localPreview);
+        setMaturityData(normalized);
+        setMaturityError(
+          normalized
+            ? null
+            : {
+                message: 'Unable to calculate maturity amount. Please check your inputs.',
+                field: null,
+              },
+        );
       })
       .catch(() => {
         if (!cancelled) {
-          setMaturityData(localPreview);
+          setMaturityData(null);
+          setMaturityError({
+            message: 'Unable to calculate maturity amount. Please check your connection and try again.',
+            field: null,
+          });
         }
       })
       .finally(() => {
@@ -119,14 +163,16 @@ export function useCalculateMaturity(
     return () => {
       cancelled = true;
     };
-  }, [depositAmount,
+  }, [
+    depositAmount,
     schemeCode,
     months,
     days,
     periodType,
     depositType,
     interestPayMode,
-    renewalRequired,]);
+    renewalRequired,
+  ]);
 
-  return { maturityData, loading };
+  return { maturityData, loading, maturityError };
 }

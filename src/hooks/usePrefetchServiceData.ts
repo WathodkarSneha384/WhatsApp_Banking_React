@@ -15,7 +15,7 @@ export function usePrefetchServiceData(
   useEffect(() => {
     if (!active || !service || !customerId) return;
 
-    prefetchAccounts(customerId);
+    prefetchAccounts(customerId, service === 'nominee' ? 'DD,TD' : 'DD');
 
     if (service === 'pps') {
       prefetchPPSParameters();

@@ -1,5 +1,6 @@
 import { getAPYPreInsAmount, getPMJJBYPreInsAmount } from '../services/bankingApi';
 import type { PMSocialSubservice } from '../types';
+import { formatInstallmentDisplayDate } from './date';
 
 export interface InsurancePremiumDetails {
   totalPremium: number;
@@ -54,6 +55,9 @@ export function parsePmSchemePremiumFromApi(
     insurancePremiumAmount?: string | number;
     siDate?: string;
     siDatedate?: string;
+    nextInstallmentDate?: string;
+    installmentDate?: string;
+    [key: string]: unknown;
   },
   fallback?: { totalPremium: number; firstPremium: number },
 ): PmSchemePremiumFromApi | null {
@@ -66,8 +70,18 @@ export function parsePmSchemePremiumFromApi(
     return fallback ?? null;
   }
 
-  const nextInstallmentDate =
-    data.siDate?.trim() || data.siDatedate?.trim() || undefined;
+  const nextInstallmentDateRaw = [
+    data.siDate,
+    data.siDatedate,
+    data.nextInstallmentDate,
+    data.installmentDate,
+  ]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .find(Boolean);
+
+  const nextInstallmentDate = nextInstallmentDateRaw
+    ? formatInstallmentDisplayDate(nextInstallmentDateRaw)
+    : undefined;
 
   return {
     totalPremium: hasTotal ? totalPremium : 0,

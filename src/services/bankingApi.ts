@@ -5,16 +5,21 @@ import { cachedFetch, cachedFetch1 } from './requestCache';
 import { getInsurancePremiumDetails } from '../utils/pmPremium';
 import { estimateFdInterestRate } from '../utils/fdMaturity';
 import { maskAccountNumber } from '../utils/accountDisplay';
+import { formatInstallmentDisplayDate } from '../utils/date';
+import { normalizeMobile } from '../utils/linkParams';
 
 const { apiBase: API_BASE, bank: BANK, secretKey: SECRET_KEY, vendor: VENDOR, username: USERNAME, password: PASSWORD, channel: CHANNEL } = apiConfig;
 
 export interface TokenValidationResponse {
-  service: ServiceType;
   customerId: string;
-  accountNumber: string;
-  customerName: string;
-  mobileNo?: string;
+  mobileNo: string;
+  customerName: string | null;
+  service: ServiceType | null;
+  subService: string | null;
 }
+
+/** SHA-256 of empty string — validatetoken uses no checksum parameters. */
+const EMPTY_CHECKSUM = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
 export interface CustomerProfile {
   customerId: string;
@@ -172,10 +177,13 @@ export async function validateMobileNo(mobileNumber: string): Promise<CustomerPr
   };
 }
 
-export async function fetchAccounts(customerId: string): Promise<AccountOption[]> {
+export async function fetchAccounts(
+  customerId: string,
+  productType = 'DD',
+): Promise<AccountOption[]> {
   const timeStamp = generateTimestamp();
   const checkSum = generateChecksum(
-    SECRET_KEY, VENDOR, 'getAcctsbalanceModuleWise', USERNAME, PASSWORD, customerId, 'DD',
+    SECRET_KEY, VENDOR, 'getAcctsbalanceModuleWise', USERNAME, PASSWORD, customerId, productType,
   );
 
   const data = await postEndpoint<BankApiResponse & { accountWiseBalances?: Array<Record<string, unknown>> }>(
@@ -185,7 +193,7 @@ export async function fetchAccounts(customerId: string): Promise<AccountOption[]
       timeStamp,
       bank: BANK,
       customerID: customerId,
-      productType: 'DD',
+      productType,
     },
   );
 
@@ -207,13 +215,16 @@ export async function fetchAccounts(customerId: string): Promise<AccountOption[]
   });
 }
 
-export function getAccounts(customerId: string): Promise<AccountOption[]> {
+export function getAccounts(customerId: string, productType = 'DD'): Promise<AccountOption[]> {
   if (!customerId) return Promise.resolve([]);
-  return cachedFetch(`accounts:${customerId}`, () => fetchAccounts(customerId));
+  return cachedFetch(
+    `accounts:${customerId}:${productType}`,
+    () => fetchAccounts(customerId, productType),
+  );
 }
 
-export function prefetchAccounts(customerId: string) {
-  return getAccounts(customerId);
+export function prefetchAccounts(customerId: string, productType = 'DD') {
+  return getAccounts(customerId, productType);
 }
 
 export async function fetchPPSParameters(): Promise<PPSParameters> {
@@ -330,8 +341,9 @@ export async function fetchInsurancePremium(
 
     const totalPremium = Number(data.totalAmount ?? calculated.totalPremium);
     const firstPremium = Number(data.insurancePremiumAmount ?? calculated.firstPremium);
-    const nextDebitWindow =
+    const nextDebitWindowRaw =
       data.siDate?.trim() || data.siDatedate?.trim() || calculated.nextDebitWindow;
+    const nextDebitWindow = formatInstallmentDisplayDate(nextDebitWindowRaw);
     return {
       totalPremium: Number.isFinite(totalPremium) ? totalPremium : calculated.totalPremium,
       firstPremium: Number.isFinite(firstPremium) ? firstPremium : calculated.firstPremium,
@@ -626,10 +638,71 @@ export async function doProcessPMJJBYSBY(input: {
   return { referenceNumber: String(data.referenceNumber ?? Date.now().toString().slice(-8)) };
 }
 
-export async function validateToken(token: string): Promise<TokenValidationResponse> {
-  const response = await fetch(`/api/validate-token?token=${encodeURIComponent(token)}`);
-  if (!response.ok) throw new Error('Invalid or expired token');
-  return response.json();
+export async function validateToken(jwtToken: string): Promise<TokenValidationResponse> {
+  const timeStamp = generateTimestamp();
+
+  const data = await postEndpoint<BankApiResponse & {
+    generateJwtToken?: {
+      customerId?: string;
+      mobile?: string;
+      service?: string;
+      subService?: string;
+      subservice?: string;
+    };
+    validate?: boolean;
+  }>(
+    'validatetoken',
+    {
+      action: 'validatetoken',
+      checkSum: EMPTY_CHECKSUM,
+      passwd: PASSWORD,
+      timeStamp,
+      uname: USERNAME,
+      vendor: VENDOR,
+      jwtToken,
+    },
+    false,
+  );
+
+  const isValid =
+    data.validate === true
+    || data.errorCode === '00'
+    || data.status === '00'
+    || data.result === 'success';
+
+  if (!isValid) {
+    throw new Error(
+      data.errorMsg
+      || data.errorCode
+      || 'Invalid or expired link. Please request a new link from your bank.',
+    );
+  }
+
+  const tokenPayload = data.generateJwtToken;
+  const customerId = tokenPayload?.customerId?.trim();
+  const mobile = tokenPayload?.mobile?.trim();
+  const serviceRaw = tokenPayload?.service?.trim().toLowerCase() ?? '';
+  const subServiceRaw =
+    tokenPayload?.subService?.trim()
+    || tokenPayload?.subservice?.trim()
+    || null;
+
+  if (!customerId || !mobile) {
+    throw new Error('Unable to verify your link. Customer details were not returned.');
+  }
+
+  const validServices: ServiceType[] = ['pps', 'nominee', 'pmsocial', 'openfd'];
+  const service = validServices.includes(serviceRaw as ServiceType)
+    ? (serviceRaw as ServiceType)
+    : null;
+
+  return {
+    customerId,
+    mobileNo: normalizeMobile(mobile),
+    customerName: null,
+    service,
+    subService: subServiceRaw,
+  };
 }
 
 
@@ -729,10 +802,6 @@ export async function fetchCalculateMaturity(
     },
     false,
   );
-
-  if (data.errorCode && data.errorCode !== '00' && data.status !== '00') {
-    throw new Error(data.errorMsg || data.message || 'Unable to calculate maturity');
-  }
 
   return data;
 }

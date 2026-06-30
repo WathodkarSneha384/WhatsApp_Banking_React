@@ -5,6 +5,9 @@ import { validateToken, validateMobileNo } from '../services/api';
 import { getDevCustomerFallback } from '../config/apiConfig';
 import {
   extractCustomerFromUrl,
+  getJwtFromParams,
+  isJwtToken,
+  resolvePmSocialSubservice,
   type CustomerLinkSession,
 } from '../utils/linkParams';
 
@@ -13,6 +16,7 @@ type FlowStatus = 'loading' | 'ready' | 'error' | 'home';
 interface UseServiceFlowResult {
   service: ServiceType | null;
   subservice: PMSocialSubservice | null;
+  serviceSubMode: string | null;
   status: FlowStatus;
   error: string | null;
   customerId: string | null;
@@ -24,7 +28,7 @@ const VALID_SERVICES: ServiceType[] = ['pps', 'nominee', 'pmsocial', 'openfd'];
 const PM_SOCIAL_SUBSERVICES: PMSocialSubservice[] = ['PMJJBY', 'PMSBY', 'PMAPY'];
 
 const MISSING_LINK_ERROR =
-  'This link is missing customer details. Please use the WhatsApp link sent by your bank.';
+  'This link is missing authentication. Please use the WhatsApp link sent by your bank.';
 
 function isValidService(value: string): value is ServiceType {
   return VALID_SERVICES.includes(value as ServiceType);
@@ -69,6 +73,7 @@ export function useServiceFlow(): UseServiceFlowResult {
   const [status, setStatus] = useState<FlowStatus>('loading');
   const [service, setService] = useState<ServiceType | null>(null);
   const [subservice, setSubservice] = useState<PMSocialSubservice | null>(null);
+  const [serviceSubMode, setServiceSubMode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [mobileNo, setMobileNo] = useState<string | null>(null);
@@ -79,7 +84,7 @@ export function useServiceFlow(): UseServiceFlowResult {
 
     const serviceParam = searchParams.get('service');
     const subserviceParam = searchParams.get('subservice');
-    const tokenParam = searchParams.get('token');
+    const jwtParam = getJwtFromParams(searchParams);
     const urlSession = extractCustomerFromUrl(searchParams);
 
     const applySession = (session: CustomerLinkSession | null): boolean => {
@@ -106,25 +111,55 @@ export function useServiceFlow(): UseServiceFlowResult {
           setCustomerName(profile.customerName);
         }
       } catch {
-        // Keep URL-provided customerId/mobile even if profile lookup fails.
+        // Keep token-provided customerId/mobile even if profile lookup fails.
       }
     };
 
-    const finishReady = (resolvedService: ServiceType, resolvedSubservice: PMSocialSubservice | null) => {
+    const finishReady = (
+      resolvedService: ServiceType,
+      resolvedSubservice: PMSocialSubservice | null,
+      resolvedSubMode: string | null,
+    ) => {
       if (resolvedService === 'pmsocial' && !resolvedSubservice) {
-        setError('Please specify a valid scheme (PMJJBY, PMSBY, or PMAPY) using the subservice parameter.');
+        setError('Please specify a valid scheme (PMJJBY, PMSBY, or PMAPY).');
         setStatus('error');
         return;
       }
       setService(resolvedService);
       setSubservice(resolvedSubservice);
+      setServiceSubMode(resolvedSubMode);
       setStatus('ready');
     };
 
+    const finishFromLegacyServiceParam = () => {
+      if (!serviceParam || isJwtToken(serviceParam)) {
+        setService(null);
+        setSubservice(null);
+        setServiceSubMode(null);
+        setStatus('home');
+        return;
+      }
+
+      const normalized = serviceParam.toLowerCase();
+
+      if (isValidSubservice(normalized)) {
+        finishReady('pmsocial', normalized.toUpperCase() as PMSocialSubservice, null);
+        return;
+      }
+
+      if (isValidService(normalized)) {
+        finishReady(normalized, resolveSubservice(normalized, subserviceParam), subserviceParam);
+        return;
+      }
+
+      setError(`Unknown service "${serviceParam}". Please use a valid banking service link.`);
+      setStatus('error');
+    };
+
     const run = async () => {
-      if (tokenParam) {
+      if (jwtParam) {
         try {
-          const data = await validateToken(tokenParam);
+          const data = await validateToken(jwtParam);
           if (cancelled) return;
 
           const session = resolveCustomerSession(urlSession, {
@@ -138,10 +173,23 @@ export function useServiceFlow(): UseServiceFlowResult {
           await enrichCustomerName(session!);
           if (cancelled) return;
 
-          finishReady(data.service, resolveSubservice(data.service, subserviceParam));
-        } catch {
+          if (!data.service) {
+            setError('Unable to determine service from your link. Please request a new link from your bank.');
+            setStatus('error');
+            return;
+          }
+
+          const resolvedSubservice = data.service === 'pmsocial'
+            ? resolvePmSocialSubservice(data.subService)
+            : null;
+
+          finishReady(data.service, resolvedSubservice, data.subService);
+        } catch (err) {
           if (!cancelled) {
-            setError('Invalid or expired link. Please request a new link from your bank.');
+            const message = err instanceof Error
+              ? err.message
+              : 'Invalid or expired link. Please request a new link from your bank.';
+            setError(message);
             setStatus('error');
           }
         }
@@ -157,6 +205,7 @@ export function useServiceFlow(): UseServiceFlowResult {
 
         setService(null);
         setSubservice(null);
+        setServiceSubMode(null);
         setCustomerId(session.customerId);
         setMobileNo(session.mobileNo);
         setCustomerName(session.customerName ?? 'Customer');
@@ -171,19 +220,7 @@ export function useServiceFlow(): UseServiceFlowResult {
 
       void enrichCustomerName(session!);
 
-      const normalized = serviceParam.toLowerCase();
-
-      if (isValidSubservice(normalized)) {
-        finishReady('pmsocial', normalized.toUpperCase() as PMSocialSubservice);
-        return;
-      }
-
-      if (isValidService(normalized)) {
-        finishReady(normalized, resolveSubservice(normalized, subserviceParam));
-      } else {
-        setError(`Unknown service "${serviceParam}". Please use a valid banking service link.`);
-        setStatus('error');
-      }
+      finishFromLegacyServiceParam();
     };
 
     void run();
@@ -193,5 +230,14 @@ export function useServiceFlow(): UseServiceFlowResult {
     };
   }, [searchParams]);
 
-  return { service, subservice, status, error, customerId, mobileNo, customerName };
+  return {
+    service,
+    subservice,
+    serviceSubMode,
+    status,
+    error,
+    customerId,
+    mobileNo,
+    customerName,
+  };
 }
