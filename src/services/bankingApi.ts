@@ -1020,12 +1020,19 @@ export async function getAPYPreInsAmount(input: {
   );
 }
 
-export async function getPMJJBYPreInsAmount(input: {
+export type PmPreInsInsuranceType = 'PMJJBY' | 'PMSBY' | 'PMAPY';
+
+function resolvePreInsSchemeCode(insuranceType: PmPreInsInsuranceType): string {
+  return insuranceType === 'PMAPY' ? 'APY' : insuranceType;
+}
+
+export async function getPmPreInsAmount(input: {
   customerId: string;
+  insuranceType: PmPreInsInsuranceType;
   debitAccountNo?: string;
 }): Promise<any> {
-  const { customerId, debitAccountNo } = input;
-  const scheme = 'PMJJBY';
+  const { customerId, insuranceType, debitAccountNo } = input;
+  const scheme = resolvePreInsSchemeCode(insuranceType);
   const timeStamp = generateTimestamp();
 
   const checkSum = debitAccountNo
@@ -1048,4 +1055,11 @@ export async function getPMJJBYPreInsAmount(input: {
   if (debitAccountNo) payload.debitAccountNo = debitAccountNo;
 
   return postEndpoint('getpreinsamount', payload, false);
+}
+
+export async function getPMJJBYPreInsAmount(input: {
+  customerId: string;
+  debitAccountNo?: string;
+}): Promise<any> {
+  return getPmPreInsAmount({ ...input, insuranceType: 'PMJJBY' });
 }

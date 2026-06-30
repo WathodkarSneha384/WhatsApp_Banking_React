@@ -13,14 +13,13 @@ import { useAccounts } from '../../hooks/useAccounts';
 import { useRelations } from '../../hooks/useRelations';
 import ServiceResultScreen from '../../components/ServiceResultScreen';
 import { useServiceFlowReset } from '../../hooks/useServiceFlowReset';
-import { useInsurancePremium } from '../../hooks/useInsurancePremium';
 import type { PMSocialSubservice } from '../../types';
 import { doProcessAPYPolicy, doProcessPMJJBYSBY, sendOtp, validateOtp } from '../../services/api';
 import AccountDisplay from '../../components/AccountDisplay';
 import { formatInstallmentDisplayDate } from '../../utils/date';
 import {
   PENSION_AMOUNT_OPTIONS,
-  fetchPmJjbyPreInsAmount,
+  fetchPmSchemePreInsAmount,
   getPmapyInstallmentAmount,
   parsePmSchemePremiumFromApi,
   type PmapyInstallmentFrequency,
@@ -89,14 +88,12 @@ export default function PMSocial() {
   const [operationResult, setOperationResult] = useState<OperationResult | null>(null);
   const resetToServiceHome = useServiceFlowReset('pmsocial');
 
-  const insuranceScheme = subservice === 'PMSBY' ? 'PMSBY' : null;
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
-  const { premium: premiumDetails, loading: premiumLoading } = useInsurancePremium(insuranceScheme);
   const { relations } = useRelations('pmyrelation');
-  const [jjbyPremium, setJjbyPremium] = useState<PmSchemePremiumFromApi | null>(null);
-  const [jjbyPremiumLoading, setJjbyPremiumLoading] = useState(false);
-  const [jjbyMessage, setJjbyMessage] = useState('');
-  const [jjbyEligible, setJjbyEligible] = useState(true);
+  const [schemePremium, setSchemePremium] = useState<PmSchemePremiumFromApi | null>(null);
+  const [schemePremiumLoading, setSchemePremiumLoading] = useState(false);
+  const [schemeMessage, setSchemeMessage] = useState('');
+  const [schemeEligible, setSchemeEligible] = useState(true);
   const [apyPremium, setApyPremium] = useState<PmSchemePremiumFromApi | null>(null);
   const [apyPremiumLoading, setApyPremiumLoading] = useState(false);
   const [apyMessage, setApyMessage] = useState('');
@@ -104,42 +101,42 @@ export default function PMSocial() {
 
 
   useEffect(() => {
-    const fetchJjbyPremium = async () => {
-      if (subservice !== 'PMJJBY') {
-        setJjbyPremium(null);
+    const fetchSchemePremium = async () => {
+      if (subservice !== 'PMJJBY' && subservice !== 'PMSBY') {
+        setSchemePremium(null);
         return;
       }
 
       if (!customer.customerId) {
-        setJjbyPremium(null);
+        setSchemePremium(null);
         return;
       }
 
-      setJjbyPremiumLoading(true);
+      setSchemePremiumLoading(true);
       try {
-        const response = await fetchPmJjbyPreInsAmount(customer.customerId);
+        const response = await fetchPmSchemePreInsAmount(customer.customerId, subservice);
 
         if (!response) {
-          setJjbyPremium(null);
+          setSchemePremium(null);
           return;
         }
 
         if (response.errorCode !== '00') {
-          setJjbyEligible(false);
-          setJjbyPremium(null);
-          setJjbyMessage(response.errorMsg || 'Unable to fetch premium details');
+          setSchemeEligible(false);
+          setSchemePremium(null);
+          setSchemeMessage(response.errorMsg || 'Unable to fetch premium details');
           return;
         }
 
-        setJjbyEligible(true);
-        setJjbyMessage('');
-        setJjbyPremium(parsePmSchemePremiumFromApi(response));
+        setSchemeEligible(true);
+        setSchemeMessage('');
+        setSchemePremium(parsePmSchemePremiumFromApi(response));
       } finally {
-        setJjbyPremiumLoading(false);
+        setSchemePremiumLoading(false);
       }
     };
 
-    fetchJjbyPremium();
+    fetchSchemePremium();
   }, [subservice, customer.customerId]);
 
   useEffect(() => {
@@ -293,9 +290,7 @@ export default function PMSocial() {
       customerId: customer.customerId,
       debitAccountNumber: savingAccount,
       insuranceCompany: scheme as 'PMJJBY' | 'PMSBY',
-      totalPremiumAmount: scheme === 'PMJJBY'
-        ? (jjbyPremium?.totalPremium ?? 0)
-        : (premiumDetails?.totalPremium ?? 0),
+      totalPremiumAmount: schemePremium?.totalPremium ?? 0,
       nomineeName: nominee.nomineeName,
       nomineeRelationCode: Number(nominee.relation),
       nomineeDob: nominee.nomineeDob,
@@ -346,13 +341,11 @@ export default function PMSocial() {
   };
 
   const annualPremiumAmount =
-    scheme === 'PMSBY' && premiumDetails
-      ? premiumDetails.totalPremium
-      : scheme === 'PMJJBY' && jjbyPremium
-        ? jjbyPremium.totalPremium
-        : scheme === 'PMAPY' && apyPremium
-          ? apyPremium.totalPremium
-          : null;
+    (scheme === 'PMJJBY' || scheme === 'PMSBY') && schemePremium
+      ? schemePremium.totalPremium
+      : scheme === 'PMAPY' && apyPremium
+        ? apyPremium.totalPremium
+        : null;
 
   const annualPremiumLabel =
     annualPremiumAmount != null
@@ -360,13 +353,11 @@ export default function PMSocial() {
       : SCHEME_INFO[scheme].premium;
 
   const firstPremiumAmount =
-    scheme === 'PMSBY'
-      ? premiumDetails?.firstPremium
-      : scheme === 'PMJJBY'
-        ? jjbyPremium?.firstPremium
-        : scheme === 'PMAPY'
-          ? apyPremium?.firstPremium
-          : undefined;
+    scheme === 'PMJJBY' || scheme === 'PMSBY'
+      ? schemePremium?.firstPremium
+      : scheme === 'PMAPY'
+        ? apyPremium?.firstPremium
+        : undefined;
 
   const pmapyInstallmentAmount = scheme === 'PMAPY' ? apyPremium?.firstPremium : undefined;
 
@@ -376,13 +367,11 @@ export default function PMSocial() {
   const balanceError = getInsufficientBalanceError(acc, firstPremiumAmount);
 
   const nextInstallmentDate =
-    scheme === 'PMJJBY'
-      ? formatNextInstallmentDate(jjbyPremium?.nextInstallmentDate)
+    scheme === 'PMJJBY' || scheme === 'PMSBY'
+      ? formatNextInstallmentDate(schemePremium?.nextInstallmentDate)
       : scheme === 'PMAPY'
         ? formatNextInstallmentDate(apyPremium?.nextInstallmentDate)
-        : scheme === 'PMSBY'
-          ? formatNextInstallmentDate(premiumDetails?.nextDebitWindow)
-          : undefined;
+        : undefined;
 
   const premiumDetailsSection = scheme === 'PMAPY' ? (
     <>
@@ -406,7 +395,7 @@ export default function PMSocial() {
       <div className="summary-row">
         <span className="summary-key">Annual Premium</span>
         <span className="summary-val">
-          {jjbyPremiumLoading && scheme === 'PMJJBY'
+          {schemePremiumLoading && (scheme === 'PMJJBY' || scheme === 'PMSBY')
             ? 'Loading…'
             : annualPremiumLabel}
         </span>
@@ -484,58 +473,35 @@ export default function PMSocial() {
             <div className="summary-row">
               <span className="summary-key">Annual Premium</span>
               <span className="summary-val">
-                {scheme === 'PMJJBY' && jjbyPremiumLoading ? 'Loading…' : annualPremiumLabel}
+                {schemePremiumLoading ? 'Loading…' : annualPremiumLabel}
               </span>
             </div>
 
-            {scheme === 'PMSBY' && premiumLoading && (
+            {schemePremiumLoading && (
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
                 Loading premium details…
               </p>
             )}
 
-            {scheme === 'PMJJBY' && jjbyPremiumLoading && (
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-                Loading premium details…
-              </p>
-            )}
-
-            {scheme === 'PMJJBY' && jjbyPremium && (
+            {schemePremium && (
               <div className="summary-row">
                 <span className="summary-key">First Premium Amount (Pro Rata)</span>
                 <span className="summary-val">
-                  ₹{jjbyPremium.firstPremium.toLocaleString('en-IN')}
+                  ₹{schemePremium.firstPremium.toLocaleString('en-IN')}
                 </span>
               </div>
             )}
 
-            {scheme === 'PMJJBY' && jjbyPremium?.nextInstallmentDate && (
+            {schemePremium?.nextInstallmentDate && (
               <div className="summary-row">
                 <span className="summary-key">Next Installment Date</span>
-                <span className="summary-val">{formatNextInstallmentDate(jjbyPremium.nextInstallmentDate)}</span>
+                <span className="summary-val">{formatNextInstallmentDate(schemePremium.nextInstallmentDate)}</span>
               </div>
             )}
 
-            {scheme === 'PMSBY' && premiumDetails && (
-              <>
-                <div className="summary-row">
-                  <span className="summary-key">First Premium Amount (Pro Rata)</span>
-                  <span className="summary-val">
-                    ₹{premiumDetails.firstPremium.toLocaleString('en-IN')}
-                  </span>
-                </div>
-                {premiumDetails.nextDebitWindow && (
-                  <div className="summary-row">
-                    <span className="summary-key">Next Installment Date</span>
-                    <span className="summary-val">{formatNextInstallmentDate(premiumDetails.nextDebitWindow)}</span>
-                  </div>
-                )}
-              </>
-            )}
-
-            {scheme === 'PMJJBY' && !jjbyEligible && jjbyMessage && (
+            {!schemeEligible && schemeMessage && (
               <p className="form-error" style={{ marginTop: 6 }}>
-                {jjbyMessage}
+                {schemeMessage}
               </p>
             )}
           </div>
@@ -654,10 +620,10 @@ export default function PMSocial() {
       <Actions>
         <button
           className="btn btn-primary"
-          disabled={Boolean(balanceError) || (scheme === 'PMJJBY' && !jjbyEligible) || (scheme === 'PMAPY' && !apyEligible)}
+          disabled={Boolean(balanceError) || ((scheme === 'PMJJBY' || scheme === 'PMSBY') && !schemeEligible) || (scheme === 'PMAPY' && !apyEligible)}
           onClick={() => {
             if (balanceError) return;
-            if (validateForm() && ((scheme !== 'PMJJBY' && scheme !== 'PMAPY') || (scheme === 'PMJJBY' ? jjbyEligible : apyEligible))) {
+            if (validateForm() && ((scheme !== 'PMJJBY' && scheme !== 'PMSBY' && scheme !== 'PMAPY') || (scheme === 'PMAPY' ? apyEligible : schemeEligible))) {
               setStep('confirm');
             }
           }}

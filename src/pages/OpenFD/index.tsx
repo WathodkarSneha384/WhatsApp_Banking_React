@@ -110,7 +110,6 @@ export default function OpenFD() {
   const [nominee, setNominee] = useState<NomineeFieldValues>(EMPTY_NOMINEE);
   const [nomineeErrors, setNomineeErrors] = useState<NomineeFieldErrors>({});
   const [loading, setLoading] = useState(false);
-  const [refNo] = useState(() => 'FD' + Date.now().toString().slice(-8));
   const [operationResult, setOperationResult] = useState<OperationResult | null>(null);
   const resetToServiceHome = useServiceFlowReset('openfd');
 
@@ -516,14 +515,7 @@ useEffect(() => {
         refNo={operationResult.refNo}
         refLabel={operationResult.refLabel}
         onCancel={resetToServiceHome}
-      >
-        {operationResult.status === 'success' && (
-          <div className="ref-box" style={{ background: '#eef3fb', borderColor: '#c5d6f5', marginTop: 12 }}>
-            <div className="ref-label" style={{ color: 'var(--primary)', opacity: 0.85 }}>Reference Number</div>
-            <div className="ref-value" style={{ color: 'var(--primary)', fontSize: 17 }}>{refNo}</div>
-          </div>
-        )}
-      </ServiceResultScreen>
+      />
     );
   }
 

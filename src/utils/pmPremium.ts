@@ -1,5 +1,7 @@
-import { getAPYPreInsAmount, getPMJJBYPreInsAmount } from '../services/bankingApi';
+import { getAPYPreInsAmount, getPmPreInsAmount } from '../services/bankingApi';
 import type { PMSocialSubservice } from '../types';
+
+export type PmPreInsScheme = Extract<PMSocialSubservice, 'PMJJBY' | 'PMSBY' | 'PMAPY'>;
 import { formatInstallmentDisplayDate } from './date';
 
 export interface InsurancePremiumDetails {
@@ -97,9 +99,13 @@ function toInstallmentFreqCode(frequency: PmapyInstallmentFrequency | ''): 'M' |
   return '';
 }
 
-export async function fetchPmJjbyPreInsAmount(customerId: string) {
+export async function fetchPmSchemePreInsAmount(
+  customerId: string,
+  insuranceType: PmPreInsScheme,
+  debitAccountNo?: string,
+) {
   try {
-    return await getPMJJBYPreInsAmount({ customerId });
+    return await getPmPreInsAmount({ customerId, insuranceType, debitAccountNo });
   } catch (error) {
     return {
       errorCode: '425',
@@ -109,6 +115,10 @@ export async function fetchPmJjbyPreInsAmount(customerId: string) {
         : 'Failed to fetch premium amount',
     };
   }
+}
+
+export async function fetchPmJjbyPreInsAmount(customerId: string) {
+  return fetchPmSchemePreInsAmount(customerId, 'PMJJBY');
 }
 
 export async function getPmapyInstallmentAmount(
