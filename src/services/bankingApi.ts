@@ -21,6 +21,7 @@ export interface CustomerProfile {
   customerName: string;
   mobileNo: string;
   dateOfBirth?: string;
+  branchCurrentDate: string;
 }
 
 export interface AccountOption {
@@ -159,7 +160,7 @@ export async function validateMobileNo(mobileNumber: string): Promise<CustomerPr
     SECRET_KEY, VENDOR, 'validateMobileNo_MS', USERNAME, PASSWORD, mobileNumber,
   );
 
-  const data = await postEndpoint<BankApiResponse & { cif?: string; customerName?: string; dateOfBirth?: string }>(
+  const data = await postEndpoint<BankApiResponse & { cif?: string; customerName?: string; dateOfBirth?: string; branchCurrentDate?:string }>(
     'validateMobileNo_MS',
     { ...basePayload('validateMobileNo_MS', checkSum), timeStamp, mobileNumber },
   );
@@ -169,6 +170,7 @@ export async function validateMobileNo(mobileNumber: string): Promise<CustomerPr
     customerName: data.customerName || '',
     mobileNo: mobileNumber,
     dateOfBirth: data.dateOfBirth,
+    branchCurrentDate : data.branchCurrentDate || '',
   };
 }
 

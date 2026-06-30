@@ -18,6 +18,7 @@ interface UseServiceFlowResult {
   customerId: string | null;
   mobileNo: string | null;
   customerName: string | null;
+  branchCurrentDate: string | null;
 }
 
 const VALID_SERVICES: ServiceType[] = ['pps', 'nominee', 'pmsocial', 'openfd'];
@@ -73,6 +74,7 @@ export function useServiceFlow(): UseServiceFlowResult {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [mobileNo, setMobileNo] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState<string | null>(null);
+  const [branchCurrentDate, setbranchCurrentDate] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +106,9 @@ export function useServiceFlow(): UseServiceFlowResult {
 
         if (profile.customerName) {
           setCustomerName(profile.customerName);
+        }
+         if (profile.branchCurrentDate) {
+          setbranchCurrentDate(profile.branchCurrentDate);
         }
       } catch {
         // Keep URL-provided customerId/mobile even if profile lookup fails.
@@ -193,5 +198,5 @@ export function useServiceFlow(): UseServiceFlowResult {
     };
   }, [searchParams]);
 
-  return { service, subservice, status, error, customerId, mobileNo, customerName };
+  return { service, subservice, status, error, customerId, mobileNo, customerName ,branchCurrentDate };
 }

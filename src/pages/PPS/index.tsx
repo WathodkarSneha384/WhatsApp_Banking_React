@@ -8,6 +8,7 @@ import { useAccounts } from '../../hooks/useAccounts';
 import { createPPSChequeEntry, sendOtp, validateOtp } from '../../services/api';
 import AccountDisplay from '../../components/AccountDisplay';
 import { toInputDate } from '../../utils/date';
+import { useServiceFlow } from '../../hooks/useServiceFlow';
 
 type Mode = 'entry' | 'view';
 type Step = 'select' | 'form' | 'confirm' | 'otp' | 'submit' | 'result';
@@ -147,6 +148,12 @@ export default function PPS() {
 
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
 
+  const flow = useServiceFlow();
+
+  // console.log(flow.branchCurrentDate);
+
+  const branchDate = flow.branchCurrentDate;
+
   const stepLabels = mode === 'view' ? VIEW_STEPS : ENTRY_STEPS;
   const curStep = STEP_NUM[step];
 
@@ -195,17 +202,23 @@ export default function PPS() {
     setErrors(e);
     return Object.keys(e).length === 0;
   };
-  const getMinIssueDate = () => {
-    const date = new Date();
-    date.setMonth(date.getMonth() - 3);
-    return toInputDate(date);
-  };
+ const getMinIssueDate = () => {
+  if (!flow.branchCurrentDate) return '';
 
-  const getMaxIssueDate = () => {
-    const date = new Date();
-    date.setMonth(date.getMonth() + 3);
-    return toInputDate(date);
-  };
+  const date = new Date(flow.branchCurrentDate);
+  date.setMonth(date.getMonth() - 3);
+
+  return date.toISOString().split('T')[0];
+};
+
+const getMaxIssueDate = () => {
+  if (!flow.branchCurrentDate) return '';
+
+  const date = new Date(flow.branchCurrentDate);
+  date.setMonth(date.getMonth() + 3);
+
+  return date.toISOString().split('T')[0];
+};
 
   const restartEntryForm = () => {
     setMode('entry');
@@ -569,7 +582,7 @@ export default function PPS() {
 
         setReviewLoading(true);
         setApiError('');
-
+        //console.log('SysytemDAte===',)
         try {
           const payload = {
             accountNo: form.accountNo,
