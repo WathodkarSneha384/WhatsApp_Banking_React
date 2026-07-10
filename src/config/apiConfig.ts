@@ -1,4 +1,7 @@
+import { RSA_PUBLIC_KEY_PEM } from './rsaPublicKey';
+
 const DEFAULT_API_BASE = '/dmCmsService/rest/endpoints';
+const DEFAULT_ENCRYPTED_API_PATH = '/whatsapp/cmrequest/cmdataprocessing';
 
 function resolveApiBase(): string {
   const configured = import.meta.env.VITE_API_BASE?.trim();
@@ -26,6 +29,26 @@ function envOrDefault(name: string, fallback: string): string {
 function envOptional(name: string): string {
   return import.meta.env[name]?.trim() || '';
 }
+
+function normalizeMultilinePem(value: string): string {
+  return value.replace(/\\n/g, '\n').trim();
+}
+
+function resolveEncryptedApiPath(): string {
+  const configured = import.meta.env.VITE_ENCRYPTED_API_PATH?.trim();
+  if (!configured) return DEFAULT_ENCRYPTED_API_PATH;
+  return configured.startsWith('/') ? configured : `/${configured}`;
+}
+
+export const piEncryptionConfig = {
+  /** Enable hybrid RSA/AES encryption for PI-sensitive Channel Manager APIs. */
+  enabled: import.meta.env.VITE_PI_ENCRYPTION_ENABLED === 'true',
+  apiPath: resolveEncryptedApiPath(),
+  publicKeyPem: normalizeMultilinePem(
+    envOptional('VITE_RSA_PUBLIC_KEY') || RSA_PUBLIC_KEY_PEM,
+  ),
+  privateKeyPem: normalizeMultilinePem(envOptional('VITE_RSA_PRIVATE_KEY')),
+} as const;
 
 export const apiConfig = {
   apiBase: resolveApiBase(),

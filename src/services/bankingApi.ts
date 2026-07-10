@@ -1,6 +1,7 @@
 import jsSHA from 'jssha';
 import type { ServiceType, PMSocialSubservice } from '../types';
-import { apiConfig } from '../config/apiConfig';
+import { apiConfig, piEncryptionConfig } from '../config/apiConfig';
+import { encryptJson, parseMaybeEncryptedResponse, type EncryptedEnvelope } from '../utils/piEncryption';
 import { cachedFetch, cachedFetch1 } from './requestCache';
 import { getInsurancePremiumDetails } from '../utils/pmPremium';
 import { estimateFdInterestRate } from '../utils/fdMaturity';
@@ -116,11 +117,81 @@ async function parseApiResponse<T>(response: Response, endpoint: string): Promis
   }
 }
 
+const PI_ENCRYPTED_ACTIONS = new Set([
+  'validateMobileNo_MS',
+  'getAcctsbalanceModuleWise',
+  'createPPSChequeEntry',
+  'sendotp',
+  'validateotp',
+]);
+
+function resolveApiAction(endpoint: string, payload: Record<string, unknown>): string {
+  return String(payload.action ?? endpoint);
+}
+
+function shouldUsePiEncryption(action: string): boolean {
+  return piEncryptionConfig.enabled && PI_ENCRYPTED_ACTIONS.has(action);
+}
+
+async function postEncryptedEndpoint<T extends BankApiResponse>(
+  action: string,
+  payload: Record<string, unknown>,
+  validate = true,
+): Promise<T> {
+  if (!piEncryptionConfig.privateKeyPem) {
+    throw new Error(
+      'PI encryption is enabled but VITE_RSA_PRIVATE_KEY is not configured.',
+    );
+  }
+
+  const url = piEncryptionConfig.apiPath;
+  const encryptedBody = await encryptJson(
+    JSON.stringify(payload),
+    piEncryptionConfig.publicKeyPem,
+  );
+
+  if (import.meta.env.DEV) {
+    console.debug('[API encrypted]', url, action);
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(encryptedBody),
+  });
+
+  const encryptedResponse = await parseApiResponse<EncryptedEnvelope | T>(response, action);
+  const data = await parseMaybeEncryptedResponse<T>(
+    encryptedResponse,
+    piEncryptionConfig.privateKeyPem,
+  );
+
+  if (import.meta.env.DEV) {
+    console.debug('[API decrypted]', action, data);
+  }
+
+  if (!response.ok) {
+    throw new Error(data.errorMsg || data.message || `Request failed: ${action}`);
+  }
+
+  if (validate) {
+    assertSuccess(data);
+  }
+
+  return data;
+}
+
 async function postEndpoint<T extends BankApiResponse>(
   endpoint: string,
   payload: Record<string, unknown>,
   validate = true,
 ): Promise<T> {
+  const action = resolveApiAction(endpoint, payload);
+
+  if (shouldUsePiEncryption(action)) {
+    return postEncryptedEndpoint<T>(action, payload, validate);
+  }
+
   const url = `${API_BASE}/${endpoint}`;
 
   if (import.meta.env.DEV) {

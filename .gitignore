@@ -19,6 +19,7 @@ dist-ssr
 # SSL private keys — never commit
 deploy/ssl/private.key
 deploy/ssl/*.key
+src/assets/keys/private_key.pem
 
 # Editor directories and files
 .vscode/*

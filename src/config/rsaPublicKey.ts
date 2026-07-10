@@ -1,0 +1,10 @@
+/** RSA public key for PI (payload) encryption — matches backend EncryptionDecryptionService. */
+export const RSA_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr1DcvybR342DedToCmCb
+B7FTHy1FubHZZyGNjEpt4a6lmv+4p0bghPtm7YYc/YZ1CGBeWHUjmNzQVKZw4BXQ
+Os/Sjz24CqYDTV+qzbJHAB1C21HGny+jTcRKG8J7q8IkVjn9wLHKSB8qcddlG8zK
+39Fgy3brbjAxuQWu3EkSHVPy8St26ePnJhGTMyCcdkQKx7RVf7bkwGjA2DRl1fsO
+6RIK4Rf3OEtUAXKhjOVrTv2NTLjUFK8zPHduSTONXqUMXxxc9o68DA30hHfsBvPJ
+9V4YoyiSM4HwCnl7YzGvyjL6VLO/Qzm3lscg3st7onH/7SIm2e5yjOpE0TsAUkXt
+LQIDAQAB
+-----END PUBLIC KEY-----`;

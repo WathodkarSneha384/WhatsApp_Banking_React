@@ -10,6 +10,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      '/whatsapp': {
+        target: 'http://10.2.0.121:8182',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
 });
