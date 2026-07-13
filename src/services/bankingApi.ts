@@ -1,7 +1,7 @@
 import jsSHA from 'jssha';
 import type { ServiceType, PMSocialSubservice } from '../types';
 import { apiConfig, piEncryptionConfig } from '../config/apiConfig';
-import { encryptJson, parseMaybeEncryptedResponse, type EncryptedEnvelope } from '../utils/piEncryption';
+import { encrypt, parseMaybeEncryptedResponse, type EncryptedEnvelope } from '../utils/piEncryption';
 import { cachedFetch, cachedFetch1 } from './requestCache';
 import { getInsurancePremiumDetails } from '../utils/pmPremium';
 import { estimateFdInterestRate } from '../utils/fdMaturity';
@@ -9,7 +9,7 @@ import { maskAccountNumber } from '../utils/accountDisplay';
 import { formatInstallmentDisplayDate } from '../utils/date';
 import { normalizeMobile } from '../utils/linkParams';
 
-const { apiBase: API_BASE, bank: BANK, secretKey: SECRET_KEY, vendor: VENDOR, username: USERNAME, password: PASSWORD, channel: CHANNEL } = apiConfig;
+const { bank: BANK, secretKey: SECRET_KEY, vendor: VENDOR, username: USERNAME, password: PASSWORD, channel: CHANNEL } = apiConfig;
 
 export interface TokenValidationResponse {
   customerId: string;
@@ -117,38 +117,25 @@ async function parseApiResponse<T>(response: Response, endpoint: string): Promis
   }
 }
 
-const PI_ENCRYPTED_ACTIONS = new Set([
-  'validateMobileNo_MS',
-  'getAcctsbalanceModuleWise',
-  'createPPSChequeEntry',
-  'sendotp',
-  'validateotp',
-]);
-
 function resolveApiAction(endpoint: string, payload: Record<string, unknown>): string {
   return String(payload.action ?? endpoint);
 }
 
-function shouldUsePiEncryption(action: string): boolean {
-  return piEncryptionConfig.enabled && PI_ENCRYPTED_ACTIONS.has(action);
-}
-
-async function postEncryptedEndpoint<T extends BankApiResponse>(
-  action: string,
+async function postEndpoint<T extends BankApiResponse>(
+  endpoint: string,
   payload: Record<string, unknown>,
   validate = true,
 ): Promise<T> {
-  if (!piEncryptionConfig.privateKeyPem) {
+  const action = resolveApiAction(endpoint, payload);
+
+  if (!piEncryptionConfig.responsePrivateKeyPem) {
     throw new Error(
-      'PI encryption is enabled but VITE_RSA_PRIVATE_KEY is not configured.',
+      'Encrypted API calls require VITE_RSA_PRIVATE_KEY to decrypt responses.',
     );
   }
 
-  const url = piEncryptionConfig.apiPath;
-  const encryptedBody = await encryptJson(
-    JSON.stringify(payload),
-    piEncryptionConfig.publicKeyPem,
-  );
+  const url = `${piEncryptionConfig.apiPath.replace(/\/$/, '')}/${action}`;
+  const encryptedBody = await encrypt(JSON.stringify(payload));
 
   if (import.meta.env.DEV) {
     console.debug('[API encrypted]', url, action);
@@ -161,9 +148,14 @@ async function postEncryptedEndpoint<T extends BankApiResponse>(
   });
 
   const encryptedResponse = await parseApiResponse<EncryptedEnvelope | T>(response, action);
+
+  if (import.meta.env.DEV) {
+    console.debug('[API encrypted raw]', action, encryptedResponse);
+  }
+
   const data = await parseMaybeEncryptedResponse<T>(
     encryptedResponse,
-    piEncryptionConfig.privateKeyPem,
+    piEncryptionConfig.responsePrivateKeyPem,
   );
 
   if (import.meta.env.DEV) {
@@ -172,44 +164,6 @@ async function postEncryptedEndpoint<T extends BankApiResponse>(
 
   if (!response.ok) {
     throw new Error(data.errorMsg || data.message || `Request failed: ${action}`);
-  }
-
-  if (validate) {
-    assertSuccess(data);
-  }
-
-  return data;
-}
-
-async function postEndpoint<T extends BankApiResponse>(
-  endpoint: string,
-  payload: Record<string, unknown>,
-  validate = true,
-): Promise<T> {
-  const action = resolveApiAction(endpoint, payload);
-
-  if (shouldUsePiEncryption(action)) {
-    return postEncryptedEndpoint<T>(action, payload, validate);
-  }
-
-  const url = `${API_BASE}/${endpoint}`;
-
-  if (import.meta.env.DEV) {
-    console.debug('[API]', url);
-  }
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  const data = await parseApiResponse<T>(response, endpoint);
-
-  console.log('API DATA:', data);
-
-  if (!response.ok) {
-    throw new Error(data.errorMsg || data.message || `Request failed: ${endpoint}`);
   }
 
   if (validate) {

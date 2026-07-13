@@ -44,9 +44,23 @@ export const piEncryptionConfig = {
   /** Enable hybrid RSA/AES encryption for PI-sensitive Channel Manager APIs. */
   enabled: import.meta.env.VITE_PI_ENCRYPTION_ENABLED === 'true',
   apiPath: resolveEncryptedApiPath(),
+  /**
+   * Must match backend PemKeyLoader rsa.public.key (X509 / SPKI PEM).
+   * Used by RSAUtil.encryptAESKey when the client encrypts requests.
+   */
+  requestPublicKeyPem: normalizeMultilinePem(
+    envOptional('VITE_RSA_PUBLIC_KEY') || RSA_PUBLIC_KEY_PEM,
+  ),
+  /**
+   * Must match backend PemKeyLoader rsa.private.key (PKCS#8 PEM).
+   * Used by RSAUtil.decryptAESKey when the client decrypts responses.
+   */
+  responsePrivateKeyPem: normalizeMultilinePem(envOptional('VITE_RSA_PRIVATE_KEY')),
+  /** @deprecated Use requestPublicKeyPem */
   publicKeyPem: normalizeMultilinePem(
     envOptional('VITE_RSA_PUBLIC_KEY') || RSA_PUBLIC_KEY_PEM,
   ),
+  /** @deprecated Use responsePrivateKeyPem */
   privateKeyPem: normalizeMultilinePem(envOptional('VITE_RSA_PRIVATE_KEY')),
 } as const;
 

@@ -188,19 +188,20 @@ export default function PPS() {
 
     if (!form.issueDate) {
       e.issueDate = 'Issue date is required';
-    } else {
-      const issue = new Date(form.issueDate);
-      issue.setHours(0, 0, 0, 0);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const oldest = new Date(today);
-      oldest.setMonth(oldest.getMonth() - 3);
-      const latest = new Date(today);
-      latest.setMonth(latest.getMonth() + 3);
+    } 
+    // else {
+    //   const issue = new Date(form.issueDate);
+    //   issue.setHours(0, 0, 0, 0);
+    //   const today = new Date();
+    //   today.setHours(0, 0, 0, 0);
+    //   const oldest = new Date(today);
+    //   oldest.setMonth(oldest.getMonth() - 3);
+    //   const latest = new Date(today);
+    //   latest.setMonth(latest.getMonth() + 3);
 
-      if (issue < oldest) e.issueDate = 'Issue date cannot be more than 3 months old';
-      else if (issue > latest) e.issueDate = 'Issue date cannot be more than 3 months in the future';
-    }
+    //   if (issue < oldest) e.issueDate = 'Issue date cannot be more than 3 months old';
+    //   else if (issue > latest) e.issueDate = 'Issue date cannot be more than 3 months in the future';
+    // }
 
     if (!form.payeeName.trim()) {
       e.payeeName = 'Payee name is required';
