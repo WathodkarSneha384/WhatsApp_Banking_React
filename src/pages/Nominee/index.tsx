@@ -17,6 +17,8 @@ import { useServiceFlowReset } from '../../hooks/useServiceFlowReset';
 import { useAccounts } from '../../hooks/useAccounts';
 import { useRelations } from '../../hooks/useRelations';
 import { nomineeRegistration, sendOtp, validateOtp, verifyExistingNominees } from '../../services/bankingApi';
+import ConsentCheckboxes from '../../components/ConsentCheckboxes';
+import { useConsentState } from '../../hooks/useConsentState';
 
 type Step = 'select' | 'confirm' | 'otp' | 'submit' | 'result';
 const STEP_NUM: Record<Step, number> = { select: 1, confirm: 2, otp: 3, submit: 4, result: 5 };
@@ -53,6 +55,7 @@ export default function Nominee() {
   const [otpVerified, setOtpVerified] = useState(false);
   const [apiError, setApiError] = useState('');
   const [resendMsg, setResendMsg] = useState('');
+  const consent = useConsentState();
 
   useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step, setCurrentStep]);
 
@@ -284,10 +287,17 @@ export default function Nominee() {
           )}
         </div>
       </div>
+      <ConsentCheckboxes
+        idPrefix="nominee"
+        dataConsent={consent.dataConsent}
+        marketingConsent={consent.marketingConsent}
+        onDataConsentChange={consent.setDataConsent}
+        onMarketingConsentChange={consent.setMarketingConsent}
+      />
       <Actions>
         <button
           className="btn btn-primary"
-          disabled={nomineeExists === true || nomineeExists === null}
+          disabled={nomineeExists === true || nomineeExists === null || !consent.allAccepted}
           onClick={() => {
             if (validateSelect() && nomineeExists !== true) {
               setStep('confirm');

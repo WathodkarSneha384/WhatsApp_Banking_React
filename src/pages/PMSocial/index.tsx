@@ -27,6 +27,8 @@ import {
 } from '../../utils/pmPremium';
 import { relationLabel } from '../../utils/relationLabel';
 import { getInsufficientBalanceError } from '../../utils/accountBalance';
+import ConsentCheckboxes from '../../components/ConsentCheckboxes';
+import { useConsentState } from '../../hooks/useConsentState';
 
 type RuralOrUrban = 'Rural' | 'Urban';
 type Step = 'form' | 'confirm' | 'otp' | 'submit' | 'result';
@@ -86,6 +88,7 @@ export default function PMSocial() {
   const [resendMsg, setResendMsg] = useState('');
   const [otpVerified, setOtpVerified] = useState(false);
   const [operationResult, setOperationResult] = useState<OperationResult | null>(null);
+  const consent = useConsentState();
   const resetToServiceHome = useServiceFlowReset('pmsocial');
 
   const { accounts, loading: accountsLoading } = useAccounts(customer.customerId || null);
@@ -617,10 +620,22 @@ export default function PMSocial() {
           )}
         </div>
       </div>
+      <ConsentCheckboxes
+        idPrefix="pmsocial"
+        dataConsent={consent.dataConsent}
+        marketingConsent={consent.marketingConsent}
+        onDataConsentChange={consent.setDataConsent}
+        onMarketingConsentChange={consent.setMarketingConsent}
+      />
       <Actions>
         <button
           className="btn btn-primary"
-          disabled={Boolean(balanceError) || ((scheme === 'PMJJBY' || scheme === 'PMSBY') && !schemeEligible) || (scheme === 'PMAPY' && !apyEligible)}
+          disabled={
+            Boolean(balanceError)
+            || ((scheme === 'PMJJBY' || scheme === 'PMSBY') && !schemeEligible)
+            || (scheme === 'PMAPY' && !apyEligible)
+            || !consent.allAccepted
+          }
           onClick={() => {
             if (balanceError) return;
             if (validateForm() && ((scheme !== 'PMJJBY' && scheme !== 'PMSBY' && scheme !== 'PMAPY') || (scheme === 'PMAPY' ? apyEligible : schemeEligible))) {

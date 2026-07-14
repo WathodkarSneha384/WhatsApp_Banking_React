@@ -27,6 +27,8 @@ import { openFDAccount, sendOtp, validateOtp, verifyExistingNominees } from '../
 import { relationLabel } from '../../utils/relationLabel';
 import { useRelations } from '../../hooks/useRelations';
 import { getInsufficientBalanceError } from '../../utils/accountBalance';
+import ConsentCheckboxes from '../../components/ConsentCheckboxes';
+import { useConsentState } from '../../hooks/useConsentState';
 
 type NomineeSource = 'existing' | 'new' | 'no';
 type Step = 'form' | 'confirm' | 'otp' | 'submit' | 'result';
@@ -118,6 +120,7 @@ export default function OpenFD() {
   const [nomineeLoading, setNomineeLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const [otpVerified, setOtpVerified] = useState(false);
+  const consent = useConsentState();
   const otpCountdown = useOtpCountdown(step === 'otp');
   const nomineeIsMinor = nominee.nomineeDob ? (calcAge(nominee.nomineeDob) ?? 18) < 18 : false;
   const canCalculateMaturity =
@@ -765,12 +768,20 @@ useEffect(() => {
         )}
       </div>
     </div>
+      <ConsentCheckboxes
+        idPrefix="openfd"
+        dataConsent={consent.dataConsent}
+        marketingConsent={consent.marketingConsent}
+        onDataConsentChange={consent.setDataConsent}
+        onMarketingConsentChange={consent.setMarketingConsent}
+      />
       <Actions>
         <button
           className="btn btn-primary"
           disabled={
             !!debitBalanceError
             || (canCalculateMaturity && (maturityLoading || !!maturityError || !maturityData))
+            || !consent.allAccepted
           }
           onClick={handleReview}
         >

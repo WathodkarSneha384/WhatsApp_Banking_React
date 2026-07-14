@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import ServiceShell from '../../components/ServiceShell';
+import ServiceShell, { Actions } from '../../components/ServiceShell';
+import ConsentCheckboxes from '../../components/ConsentCheckboxes';
 import type { ServiceType } from '../../types';
 import { clearSessionTimer } from '../../hooks/useSessionTimeout';
+import { useConsentState } from '../../hooks/useConsentState';
 import { buildServicePath, hasRequiredLinkParams } from '../../utils/linkParams';
 import { useFlow } from '../../context/FlowContext';
 
@@ -51,13 +54,24 @@ export default function Home() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { customer } = useFlow();
+  const consent = useConsentState();
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const sessionExpired = searchParams.get('session') === 'expired';
   const hasCustomerLink = hasRequiredLinkParams(searchParams);
+
+  const selectedService = SERVICES.find(
+    (service) => `${service.id}-${service.subservice ?? 'main'}` === selectedKey,
+  ) ?? null;
 
   const openService = (path: string) => {
     if (!hasCustomerLink) return;
     clearSessionTimer();
     navigate(path);
+  };
+
+  const handleReview = () => {
+    if (!selectedService || !consent.allAccepted || !hasCustomerLink) return;
+    openService(buildServicePath(selectedService.id, searchParams, selectedService.subservice));
   };
 
   return (
@@ -85,23 +99,48 @@ export default function Home() {
         </div>
       )}
       <div className="home-grid">
-        {SERVICES.map(s => (
-          <button
-            key={`${s.id}-${s.subservice ?? 'main'}`}
-            type="button"
-            className="home-card"
-            disabled={!hasCustomerLink}
-            onClick={() => openService(buildServicePath(s.id, searchParams, s.subservice))}
-          >
-            <span className="home-card-icon">{s.icon}</span>
-            <span className="home-card-body">
-              <span className="home-card-title">{s.title}</span>
-              <span className="home-card-desc">{s.desc}</span>
-            </span>
-            <span className="home-card-arrow" aria-hidden="true">→</span>
-          </button>
-        ))}
+        {SERVICES.map((service) => {
+          const key = `${service.id}-${service.subservice ?? 'main'}`;
+          const isSelected = selectedKey === key;
+
+          return (
+            <button
+              key={key}
+              type="button"
+              className={`home-card${isSelected ? ' selected' : ''}`}
+              disabled={!hasCustomerLink}
+              aria-pressed={isSelected}
+              onClick={() => setSelectedKey(key)}
+            >
+              <span className="home-card-icon">{service.icon}</span>
+              <span className="home-card-body">
+                <span className="home-card-title">{service.title}</span>
+                <span className="home-card-desc">{service.desc}</span>
+              </span>
+              <span className="home-card-arrow" aria-hidden="true">{isSelected ? '✓' : '→'}</span>
+            </button>
+          );
+        })}
       </div>
+
+      <ConsentCheckboxes
+        idPrefix="home"
+        dataConsent={consent.dataConsent}
+        marketingConsent={consent.marketingConsent}
+        onDataConsentChange={consent.setDataConsent}
+        onMarketingConsentChange={consent.setMarketingConsent}
+      />
+
+      <Actions>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!hasCustomerLink || !selectedService || !consent.allAccepted}
+          onClick={handleReview}
+        >
+          Review →
+        </button>
+      </Actions>
     </ServiceShell>
   );
 }

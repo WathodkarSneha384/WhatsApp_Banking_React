@@ -7,6 +7,8 @@ import { Stepper, Actions } from '../../components/ServiceShell';
 import { useAccounts } from '../../hooks/useAccounts';
 import { createPPSChequeEntry, sendOtp, validateOtp } from '../../services/api';
 import AccountDisplay from '../../components/AccountDisplay';
+import ConsentCheckboxes from '../../components/ConsentCheckboxes';
+import { useConsentState } from '../../hooks/useConsentState';
 
 type Mode = 'entry' | 'view';
 type Step = 'select' | 'form' | 'confirm' | 'otp' | 'submit' | 'result';
@@ -172,6 +174,7 @@ export default function PPS() {
     setErrors(e => ({ ...e, [k]: '' }));
   };
   const [reviewLoading, setReviewLoading] = useState(false);
+  const consent = useConsentState();
 
   const selectedAccount = accounts.find(a => a.value === form.accountNo);
 
@@ -501,6 +504,13 @@ const getMaxIssueDate = () => {
                   <span>{apiError}</span>
                 </div>
               )}
+          <ConsentCheckboxes
+            idPrefix="pps"
+            dataConsent={consent.dataConsent}
+            marketingConsent={consent.marketingConsent}
+            onDataConsentChange={consent.setDataConsent}
+            onMarketingConsentChange={consent.setMarketingConsent}
+          />
         </div>
       );
     }
@@ -622,7 +632,7 @@ const getMaxIssueDate = () => {
           <button
             type="button"
             className="btn btn-primary"
-            disabled={reviewLoading}
+            disabled={reviewLoading || !consent.allAccepted}
             onClick={handleReview}
           >
             {reviewLoading ? 'Validating...' : 'Review →'}
