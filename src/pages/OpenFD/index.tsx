@@ -766,15 +766,16 @@ useEffect(() => {
             <span>The nominee linked to <AccountDisplay account={acc} /> will be applied to this FD.</span>
           </div>
         )}
+
+        <ConsentCheckboxes
+          idPrefix="openfd"
+          dataConsent={consent.dataConsent}
+          marketingConsent={consent.marketingConsent}
+          onDataConsentChange={consent.setDataConsent}
+          onMarketingConsentChange={consent.setMarketingConsent}
+        />
       </div>
     </div>
-      <ConsentCheckboxes
-        idPrefix="openfd"
-        dataConsent={consent.dataConsent}
-        marketingConsent={consent.marketingConsent}
-        onDataConsentChange={consent.setDataConsent}
-        onMarketingConsentChange={consent.setMarketingConsent}
-      />
       <Actions>
         <button
           className="btn btn-primary"

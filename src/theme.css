@@ -1582,6 +1582,44 @@
   gap: 14px;
 }
 
+/* Embedded inside a white form card — spacing matches PPS enter-details form */
+.bank-app .card .consent-panel,
+.bank-app .home-consent-card .consent-panel {
+  margin-top: 20px;
+  margin-bottom: 0;
+  padding: 16px 0 0;
+  border: none;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  gap: 12px;
+}
+
+.bank-app .card > *:has(+ .consent-panel) {
+  margin-bottom: 0 !important;
+}
+
+.bank-app .card > .grid2:has(+ .consent-panel) .fg {
+  margin-bottom: 0;
+}
+
+.bank-app .home-consent-card .consent-panel {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.bank-app .card .consent-option,
+.bank-app .home-consent-card .consent-option {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.bank-app .home-consent-card {
+  margin-top: 16px;
+}
+
 .bank-app .consent-option {
   display: flex;
   align-items: flex-start;

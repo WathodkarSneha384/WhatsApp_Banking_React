@@ -285,15 +285,16 @@ export default function Nominee() {
               />
             </>
           )}
+
+          <ConsentCheckboxes
+            idPrefix="nominee"
+            dataConsent={consent.dataConsent}
+            marketingConsent={consent.marketingConsent}
+            onDataConsentChange={consent.setDataConsent}
+            onMarketingConsentChange={consent.setMarketingConsent}
+          />
         </div>
       </div>
-      <ConsentCheckboxes
-        idPrefix="nominee"
-        dataConsent={consent.dataConsent}
-        marketingConsent={consent.marketingConsent}
-        onDataConsentChange={consent.setDataConsent}
-        onMarketingConsentChange={consent.setMarketingConsent}
-      />
       <Actions>
         <button
           className="btn btn-primary"

@@ -618,15 +618,16 @@ export default function PMSocial() {
               {formErrors.ruralOrUrban && <p className="form-error">⚠ {formErrors.ruralOrUrban}</p>}
             </div>
           )}
+
+          <ConsentCheckboxes
+            idPrefix="pmsocial"
+            dataConsent={consent.dataConsent}
+            marketingConsent={consent.marketingConsent}
+            onDataConsentChange={consent.setDataConsent}
+            onMarketingConsentChange={consent.setMarketingConsent}
+          />
         </div>
       </div>
-      <ConsentCheckboxes
-        idPrefix="pmsocial"
-        dataConsent={consent.dataConsent}
-        marketingConsent={consent.marketingConsent}
-        onDataConsentChange={consent.setDataConsent}
-        onMarketingConsentChange={consent.setMarketingConsent}
-      />
       <Actions>
         <button
           className="btn btn-primary"

@@ -123,13 +123,15 @@ export default function Home() {
         })}
       </div>
 
-      <ConsentCheckboxes
-        idPrefix="home"
-        dataConsent={consent.dataConsent}
-        marketingConsent={consent.marketingConsent}
-        onDataConsentChange={consent.setDataConsent}
-        onMarketingConsentChange={consent.setMarketingConsent}
-      />
+      <div className="card home-consent-card">
+        <ConsentCheckboxes
+          idPrefix="home"
+          dataConsent={consent.dataConsent}
+          marketingConsent={consent.marketingConsent}
+          onDataConsentChange={consent.setDataConsent}
+          onMarketingConsentChange={consent.setMarketingConsent}
+        />
+      </div>
 
       <Actions>
         <button
