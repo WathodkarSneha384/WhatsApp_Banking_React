@@ -1,7 +1,12 @@
 import jsSHA from 'jssha';
 import type { ServiceType, PMSocialSubservice } from '../types';
 import { apiConfig, piEncryptionConfig } from '../config/apiConfig';
-import { encrypt, parseMaybeEncryptedResponse, type EncryptedEnvelope } from '../utils/piEncryption';
+import {
+  encrypt,
+  parseMaybeEncryptedResponse,
+  type EncryptedEnvelope,
+  isValidEncryptedEnvelope,
+} from '../utils/piEncryption';
 import { cachedFetch, cachedFetch1 } from './requestCache';
 import { getInsurancePremiumDetails } from '../utils/pmPremium';
 import { estimateFdInterestRate } from '../utils/fdMaturity';
@@ -151,6 +156,19 @@ async function postEndpoint<T extends BankApiResponse>(
 
   if (import.meta.env.DEV) {
     console.debug('[API encrypted raw]', action, encryptedResponse);
+  }
+
+  if (
+    encryptedResponse
+    && typeof encryptedResponse === 'object'
+    && 'encryptedKey' in encryptedResponse
+    && !isValidEncryptedEnvelope(encryptedResponse)
+  ) {
+    throw new Error(
+      `${action}: server returned null encrypted fields. The server could not decrypt the request. ` +
+      'Confirm VITE_RSA_PUBLIC_KEY matches rsa.public.key on the backend for this environment, ' +
+      'then restart the dev server after updating .env.',
+    );
   }
 
   const data = await parseMaybeEncryptedResponse<T>(

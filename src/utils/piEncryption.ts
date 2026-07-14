@@ -29,6 +29,14 @@ const AES_KEY_BITS = 256;
 const GCM_IV_LENGTH = 12;
 const GCM_TAG_LENGTH = 128;
 
+function uint8ArrayToBinaryString(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return binary;
+}
+
 function binaryToUint8Array(binary: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) {
@@ -73,6 +81,7 @@ function resolveAesKeyLength(byteLength: number): 128 | 192 | 256 {
 function isEncryptedEnvelope(value: unknown): value is EncryptedEnvelope {
   if (!value || typeof value !== 'object') return false;
   const obj = value as Record<string, unknown>;
+  if (!('encryptedKey' in obj) || !('iv' in obj) || !('encryptedData' in obj)) return false;
   return (
     typeof obj.encryptedKey === 'string'
     && typeof obj.iv === 'string'
@@ -162,7 +171,7 @@ async function rsaEncryptAESKey(
   const publicKey = getForgePublicKey(publicKeyPem);
   const rawAes = new Uint8Array(await crypto.subtle.exportKey('raw', aesKey));
   const encryptedKey = publicKey.encrypt(
-    forge.util.binary.raw.encode(rawAes),
+    uint8ArrayToBinaryString(rawAes),
     'RSA-OAEP',
     rsaOaepOptions(),
   );
@@ -253,7 +262,12 @@ export async function parseMaybeEncryptedResponse<T>(
   raw: unknown,
   privateKeyPem: string,
 ): Promise<T> {
-  if (isEncryptedEnvelope(raw) && !isValidEncryptedEnvelope(raw)) {
+  if (
+    raw
+    && typeof raw === 'object'
+    && 'encryptedKey' in raw
+    && !isValidEncryptedEnvelope(raw)
+  ) {
     throw new Error(
       'Bank API returned an empty encrypted response. The server could not decrypt the request — verify VITE_RSA_PUBLIC_KEY matches rsaUtil on the backend.',
     );

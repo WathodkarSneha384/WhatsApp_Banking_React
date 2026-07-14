@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useFlow } from '../../context/FlowContext';
+import BankLogo from '../BankLogo';
 
 export function Stepper({ steps, current }: { steps: string[]; current: number }) {
   return (
@@ -30,7 +31,6 @@ interface ServiceShellProps {
   description: string;
   breadcrumb: string;
   steps?: string[];
-  logo?: string;
   bankName?: string;
   children: ReactNode;
 }
@@ -40,7 +40,6 @@ export default function ServiceShell({
   description,
   breadcrumb,
   steps,
-  logo = 'B',
   bankName = 'Digital Banking',
   children,
 }: ServiceShellProps) {
@@ -50,7 +49,7 @@ export default function ServiceShell({
     <div className="bank-app">
       <div className="appbar">
         <div className="in">
-          <div className="logo">{logo}</div>
+          <BankLogo />
           <div className="name">{bankName}</div>
           <div className="crumb">{breadcrumb}</div>
         </div>

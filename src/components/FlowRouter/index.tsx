@@ -6,6 +6,7 @@ import { useSessionTimeout } from '../../hooks/useSessionTimeout';
 import { usePrefetchServiceData } from '../../hooks/usePrefetchServiceData';
 import { FlowProvider } from '../../context/FlowContext';
 import ServiceShell from '../ServiceShell';
+import BankLogo from '../BankLogo';
 import ErrorPage from '../ErrorPage';
 import Home from '../../pages/Home';
 
@@ -70,7 +71,7 @@ function LoadingView() {
     <div className="bank-app">
       <div className="appbar">
         <div className="in">
-          <div className="logo">B</div>
+          <BankLogo />
           <div className="name">Digital Banking</div>
         </div>
       </div>
@@ -112,7 +113,7 @@ export default function FlowRouter() {
       <div className="bank-app">
         <div className="appbar">
           <div className="in">
-            <div className="logo">B</div>
+            <BankLogo />
             <div className="name">Digital Banking</div>
           </div>
         </div>

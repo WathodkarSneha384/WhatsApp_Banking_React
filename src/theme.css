@@ -82,6 +82,13 @@
   font-size: 0.85rem;
 }
 
+.appbar .logo.logo-image {
+  display: block;
+  object-fit: contain;
+  background: #fff;
+  padding: 2px;
+}
+
 .appbar .name {
   font-family: 'Bricolage Grotesque', sans-serif;
   font-weight: 800;
