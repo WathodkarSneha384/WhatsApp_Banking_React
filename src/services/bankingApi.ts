@@ -743,6 +743,8 @@ export async function nomineeRegistration(input: {
   guardianName?: string;
   guardianDateOfBirth?: string;
   relationWithMinor?: string;
+  nomineeAs?: string;
+  
 }): Promise<any> {
   const {
     accountNumber,
@@ -753,6 +755,7 @@ export async function nomineeRegistration(input: {
     guardianName = '',
     guardianDateOfBirth = '',
     relationWithMinor = '',
+    nomineeAs = '',
   } = input;
 
   const timeStamp = generateTimestamp();
@@ -780,6 +783,7 @@ export async function nomineeRegistration(input: {
       guardianName,
       guardianDateOfBirth,
       relationWithMinor,
+      nomineeAs,
     }
   );
 

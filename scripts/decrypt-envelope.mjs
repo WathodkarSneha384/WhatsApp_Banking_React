@@ -4,10 +4,10 @@ import { readFileSync } from 'fs';
 
 const envelope = {
   encryptedKey:
-    'cCGKFWqtND32JqJuChWe4fTtZlo8THnYn/XC4Memkvs88LsEuInv/SZJn/B80z+7WsbiySJ1VaTphdnpCZcBKcSYHqc21sgMBRRRPtMwPgO7Vwwjh8RS2nIlxwfj0mvwWapRHOJjAcsYkLWsrQKWqI1GqetoxKO/GiGNn2APE76SiPEc/l+Ol+KWQ7vaAhaTbm6xelMEkb0Gqyu8oYu1Ft5M+E3mUrVUFxyKF2dUXrkeLRdISPKDWNJuYdbkgjCztC20IzsGOvrO9nDm+xb/uiT+a1SLUu3z8nnQZ8O1onNeZ06QQsf5DsklMs0Ikrae98cF4zBUzaSvJxpOYHX8Rw==',
-  iv: '2Cs60/MVhmOtAg4I',
+    'M+GAtsSyKNBq8fqOTcd769vHEWWzRwItNZ7vta1PVq6cB/gWxdLQtub8OM+wyYWdgJztvxURPbdtNn3Byw7YcVcolBTPr25tMXZCbvXXK1s9KP/obB8sG6fuFUDj0sb3vG+6L3JVqhwf+HtipZUvjedG/y0WLZPc2VQuJ3LAwjo/gjMbjLDT7+xU+mjHFSg97YLVhQCcJ+fFu7L9XBNtsvl1+O2tQnKqGnb1gA7n2XG/3DWmpgmbjjP5KfC355vydaCcd7Q9vTIhW+f/JN2e8SBGqtJ5ADbAFSuT1pG2HeHSswW5EV3o+KcKrA0J68q9O8xq5yNBewPkBcl06BzvhA==',
+  iv: 'V6v0lz/Cbb49ep+d',
   encryptedData:
-    'ZB8d2poohO/b85MVRkealq5G4r84qZd1MEN0516mpWFEIguQS5AvDfGQ0IB+f7aBlMly0i/6wM1ywU1fzE+wOpCpDPQ5OIwAaQmWh4v39qnLSndVRHEi3Kng/dmW/9VqZzYDgC2WAPA5x8B7LL+ekI0Phe06/uJa8hjGToSVKFdb0FlNSoj4HxUOl9xqLpzRZADH+AZCmCcgBkMgmHoUXvbG+nHJ2t6fnFleVGVZtVfFCtAKNDNkENZpNUV0UId6p2d+mwMPuuEa',
+    'vRpFVNM8BS5vJoBEA3xXVMZ8swUtW3bn7i5nFRolFemKTpfn3yq+3hZeYWuaVQbjqHI3YFw4CEXTJVFSDt2SeNXTEdXor6ahhMEXvQZvt2a8tk5cLxbGbhSszDDz/3gA/3SupQoTNkzFjIKn1Ic4MS96w8OC/EYm9c/jwGqGwm/eloUR8pZY3jnAz8Kejivq4kKKkqAaYMiQg1R/2HK4wA09VltzTp8netLZVKCbEhK9b7/stpbXvMtD+HlurSefCyZQFwgvwVnqlGt3XhHSsT/HZ/o=',
 };
 
 const env = Object.fromEntries(
