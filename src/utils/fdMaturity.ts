@@ -6,6 +6,7 @@ export interface MaturityPreview {
   interestAmount: number;
   maturityDate: Date;
   isEstimate: boolean;
+  payOutInterestAmount?: number;
 }
 
 export function computeMaturityDate(

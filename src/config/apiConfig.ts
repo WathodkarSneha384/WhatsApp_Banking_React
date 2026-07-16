@@ -1,7 +1,10 @@
 import { RSA_PUBLIC_KEY_PEM } from './rsaPublicKey';
 
 const DEFAULT_API_BASE = '/dmCmsService/rest/endpoints';
-const DEFAULT_ENCRYPTED_API_PATH = '/whatsapp/cmrequest/cmdataprocessing';
+/** Dev: Vite proxies /whatsapp directly. Prod/UAT: use /dmCmsService prefix (nginx only proxies that path). */
+const DEFAULT_ENCRYPTED_API_PATH = import.meta.env.DEV
+  ? '/whatsapp/cmrequest/cmdataprocessing'
+  : '/dmCmsService/whatsapp/cmrequest/cmdataprocessing';
 
 function resolveApiBase(): string {
   const configured = import.meta.env.VITE_API_BASE?.trim();
@@ -36,8 +39,15 @@ function normalizeMultilinePem(value: string): string {
 
 function resolveEncryptedApiPath(): string {
   const configured = import.meta.env.VITE_ENCRYPTED_API_PATH?.trim();
-  if (!configured) return DEFAULT_ENCRYPTED_API_PATH;
-  return configured.startsWith('/') ? configured : `/${configured}`;
+  let path = configured || DEFAULT_ENCRYPTED_API_PATH;
+  if (!path.startsWith('/')) path = `/${path}`;
+
+  // UAT/production nginx proxies /dmCmsService/ — bare /whatsapp POST returns 405 from static host.
+  if (!import.meta.env.DEV && path.startsWith('/whatsapp/')) {
+    path = `/dmCmsService${path}`;
+  }
+
+  return path;
 }
 
 export const piEncryptionConfig = {

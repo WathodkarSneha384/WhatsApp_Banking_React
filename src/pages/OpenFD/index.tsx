@@ -124,39 +124,39 @@ export default function OpenFD() {
   const otpCountdown = useOtpCountdown(step === 'otp');
   const nomineeIsMinor = nominee.nomineeDob ? (calcAge(nominee.nomineeDob) ?? 18) < 18 : false;
   const canCalculateMaturity =
-  !!form.depositAmount &&
-  !!form.depositType &&
-  !!form.renewalRequired &&
-  !!form.interestPayMode &&
-  !!form.periodType &&
-  !!form.depositPeriod;
+    !!form.depositAmount &&
+    !!form.depositType &&
+    !!form.renewalRequired &&
+    !!form.interestPayMode &&
+    !!form.periodType &&
+    !!form.depositPeriod;
 
-const {
-  maturityData,
-  loading: maturityLoading,
-  maturityError,
-} = useCalculateMaturity(
-  canCalculateMaturity ? form.depositAmount : '',
-  canCalculateMaturity
-    ? (form.depositType === 'Simple' ? '001' : '002')
-    : '',
-  canCalculateMaturity && form.periodType === 'Months'
-    ? form.depositPeriod
-    : '0',
-  canCalculateMaturity && form.periodType === 'Days'
-    ? form.depositPeriod
-    : '0',
-  canCalculateMaturity
-    ? (form.periodType as 'Days' | 'Months')
-    : '',
-  canCalculateMaturity
-    ? (form.depositType as 'Simple' | 'Compound')
-    : '',
-  canCalculateMaturity
-    ? toInterestPayModeApiCode(form.interestPayMode)
-    : '',
-  form.renewalRequired // new parameter
-);
+  const {
+    maturityData,
+    loading: maturityLoading,
+    maturityError,
+  } = useCalculateMaturity(
+    canCalculateMaturity ? form.depositAmount : '',
+    canCalculateMaturity
+      ? (form.depositType === 'Simple' ? '001' : '002')
+      : '',
+    canCalculateMaturity && form.periodType === 'Months'
+      ? form.depositPeriod
+      : '0',
+    canCalculateMaturity && form.periodType === 'Days'
+      ? form.depositPeriod
+      : '0',
+    canCalculateMaturity
+      ? (form.periodType as 'Days' | 'Months')
+      : '',
+    canCalculateMaturity
+      ? (form.depositType as 'Simple' | 'Compound')
+      : '',
+    canCalculateMaturity
+      ? toInterestPayModeApiCode(form.interestPayMode)
+      : '',
+    form.renewalRequired // new parameter
+  );
   console.log('Deposite Type===', form.depositType, 'Period Type===', form.periodType, 'Deposit Period===', form.depositPeriod, 'Interest Pay Mode===', form.interestPayMode);
   const fetchExistingNominee = async (accountNumber: string) => {
     if (!accountNumber) {
@@ -217,18 +217,18 @@ const {
     }
   }, [existingNominee, form.nomineeSource]);
 
-useEffect(() => {
-  if (form.nomineeSource === 'existing' && existingNominee) {
-    setNominee({
-      nomineeName: existingNominee.nomineeName || '',
-      nomineeDob: existingNominee.nomineeDob || '',
-      relation: existingNominee.relation || '',
-      guardianName: '',
-      guardianDob: '',
-      guardianRelation: '',
-    });
-  }
-}, [form.nomineeSource, existingNominee]);
+  useEffect(() => {
+    if (form.nomineeSource === 'existing' && existingNominee) {
+      setNominee({
+        nomineeName: existingNominee.nomineeName || '',
+        nomineeDob: existingNominee.nomineeDob || '',
+        relation: existingNominee.relation || '',
+        guardianName: '',
+        guardianDob: '',
+        guardianRelation: '',
+      });
+    }
+  }, [form.nomineeSource, existingNominee]);
 
   useEffect(() => {
     if (form.savingAccount) {
@@ -685,7 +685,12 @@ useEffect(() => {
             <div className="summary-row">
               <span className="summary-key">{interestEarnedLabel}</span>
               <span className="summary-val">
-                ₹ {Number(maturityData.interestAmount).toLocaleString('en-IN', {
+                ₹{" "}
+                {Number(
+                  interestEarnedLabel === 'Interest Earned'
+                    ? maturityData.interestAmount
+                    : maturityData.payOutInterestAmount
+                ).toLocaleString('en-IN', {
                   maximumFractionDigits: 2,
                 })}
               </span>

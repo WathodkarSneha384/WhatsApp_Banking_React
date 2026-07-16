@@ -47,6 +47,7 @@ function normalizeApiMaturity(
   const maturityAmount = Number(data.maturityAmount ?? data.MATURITYAMT);
   const interestAmount = Number(data.interestAmount ?? data.INTERESTAMT);
   const interestRate = Number(data.interestRate ?? data.INTRATE);
+  const payOutInterestAmount = Number(data.payOutInterestAmount ?? data.PAYOUTINTERESTAMT);
 
   if (!Number.isFinite(maturityAmount) || maturityAmount <= 0) {
     return null;
@@ -59,6 +60,9 @@ function normalizeApiMaturity(
   return {
     interestRate: rate,
     maturityAmount,
+    payOutInterestAmount: Number.isFinite(payOutInterestAmount)
+      ? payOutInterestAmount
+      : undefined,
     interestAmount: Number.isFinite(interestAmount)
       ? interestAmount
       : Math.max(0, maturityAmount - input.principal),
