@@ -865,8 +865,7 @@ export function calculateMaturity(
 ) {
   console.log('calculateMaturity called');
   return cachedFetch1(
-
-    `maturity:${depositAmount}:${schemeCode}:${months}:${days}`,
+    `maturity:${depositAmount}:${schemeCode}:${months}:${days}:${interestPayMode}`,
     () => fetchCalculateMaturity(
       depositAmount,
       schemeCode,
