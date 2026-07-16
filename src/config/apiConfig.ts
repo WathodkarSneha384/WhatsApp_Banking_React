@@ -1,10 +1,12 @@
 import { RSA_PUBLIC_KEY_PEM } from './rsaPublicKey';
 
 const DEFAULT_API_BASE = '/dmCmsService/rest/endpoints';
-/** Dev: Vite proxies /whatsapp directly. Prod/UAT: use /dmCmsService prefix (nginx only proxies that path). */
-const DEFAULT_ENCRYPTED_API_PATH = import.meta.env.DEV
-  ? '/whatsapp/cmrequest/cmdataprocessing'
-  : '/dmCmsService/whatsapp/cmrequest/cmdataprocessing';
+/**
+ * Encrypted Channel Manager path.
+ * Nginx must proxy /whatsapp/ → backend :8788 (see deploy/myapp.conf).
+ * Do not rewrite to /dmCmsService/whatsapp — that hits :8182 and returns 405.
+ */
+const DEFAULT_ENCRYPTED_API_PATH = '/whatsapp/cmrequest/cmdataprocessing';
 
 function resolveApiBase(): string {
   const configured = import.meta.env.VITE_API_BASE?.trim();
@@ -41,12 +43,6 @@ function resolveEncryptedApiPath(): string {
   const configured = import.meta.env.VITE_ENCRYPTED_API_PATH?.trim();
   let path = configured || DEFAULT_ENCRYPTED_API_PATH;
   if (!path.startsWith('/')) path = `/${path}`;
-
-  // UAT/production nginx proxies /dmCmsService/ — bare /whatsapp POST returns 405 from static host.
-  if (!import.meta.env.DEV && path.startsWith('/whatsapp/')) {
-    path = `/dmCmsService${path}`;
-  }
-
   return path;
 }
 
