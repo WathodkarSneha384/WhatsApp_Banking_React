@@ -107,7 +107,7 @@ export default function OpenFD() {
   useEffect(() => { setCurrentStep(STEP_NUM[step]); }, [step]);
   const [form, setForm] = useState<FDForm>({
     savingAccount: '', depositAmount: '', depositType: '',
-    renewalRequired: '', interestPayMode: '', periodType: '', depositPeriod: '',
+    renewalRequired: '', interestPayMode: '', periodType: 'Months', depositPeriod: '',
     nomineeSource: '',
   });
   const [errors, setErrors] = useState<FDErrors>({});
@@ -620,12 +620,18 @@ export default function OpenFD() {
 
         <div className="form-grid-2">
           <div className="form-group form-group-full">
-            <label className="form-label">Period Type <span className="required">*</span></label>
+            <label className="form-label">
+              Period Type <span className="required">*</span>
+            </label>
+
             <div className="radio-group horizontal">
-              {(['Days', 'Months'] as const).map(t => (
-                <label key={t} className={`radio-option ${form.periodType === t ? 'selected' : ''}`}>
+              {(['Months', 'Days'] as const).map(t => (
+                <label
+                  key={t}
+                  className={`radio-option ${form.periodType === t ? 'selected' : ''}`}
+                >
                   <input
-                    id={t === 'Days' ? 'fd-periodType-days' : 'fd-periodType-months'}
+                    id={t === 'Months' ? 'fd-periodType-months' : 'fd-periodType-days'}
                     type="radio"
                     name="periodType"
                     checked={form.periodType === t}
@@ -635,7 +641,10 @@ export default function OpenFD() {
                 </label>
               ))}
             </div>
-            {errors.periodType && <p className="form-error">⚠ {errors.periodType}</p>}
+
+            {errors.periodType && (
+              <p className="form-error">⚠ {errors.periodType}</p>
+            )}
           </div>
 
           <div className="form-group form-group-full">

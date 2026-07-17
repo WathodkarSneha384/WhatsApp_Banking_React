@@ -64,7 +64,7 @@ console.log('Roundtrip B:', decB.length === 32 ? 'PASS' : 'FAIL');
 
 const hosts = [
   'http://demo.datavsn.com/whatsapp/cmrequest/cmdataprocessing/validatetoken',
-  'http://10.2.0.121:8182/whatsapp/cmrequest/cmdataprocessing/validatetoken',
+  'http://10.2.0.121:8788/whatsapp/cmrequest/cmdataprocessing/validatetoken',
   'http://10.2.0.121:8182/dmCmsService/whatsapp/cmrequest/cmdataprocessing/validatetoken',
 ];
 
