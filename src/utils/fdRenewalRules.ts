@@ -115,3 +115,37 @@ export function getInterestEarnedLabel(mode: string): string {
       return 'Interest Earned';
   }
 }
+
+const MIN_DEPOSIT_MONTHS_BY_INTEREST_MODE: Partial<Record<InterestPayModeLabel, number>> = {
+  Quarterly: 3,
+  'Half Yearly': 6,
+  Yearly: 12,
+};
+
+function depositPeriodToMonths(periodType: string, depositPeriod: number): number | null {
+  if (periodType === 'Months') return depositPeriod;
+  if (periodType === 'Days') return depositPeriod / 30;
+  return null;
+}
+
+/** Minimum tenure (in months) required for the selected interest pay mode. */
+export function getMinDepositMonthsForInterestPayMode(interestPayMode: string): number | null {
+  return MIN_DEPOSIT_MONTHS_BY_INTEREST_MODE[interestPayMode as InterestPayModeLabel] ?? null;
+}
+
+export function getDepositPeriodTenureError(
+  interestPayMode: string,
+  periodType: string,
+  depositPeriod: string,
+): string | null {
+  const minMonths = getMinDepositMonthsForInterestPayMode(interestPayMode);
+  if (minMonths == null || !periodType) return null;
+
+  const period = Number(depositPeriod);
+  if (!depositPeriod.trim() || isNaN(period) || period < 1) return null;
+
+  const tenureMonths = depositPeriodToMonths(periodType, period);
+  if (tenureMonths == null || tenureMonths >= minMonths) return null;
+
+  return `For ${interestPayMode} interest pay mode, deposit period must be at least ${minMonths} months.`;
+}

@@ -9,7 +9,9 @@ import ServiceResultScreen from '../../components/ServiceResultScreen';
 import { useServiceFlowReset } from '../../hooks/useServiceFlowReset';
 import {
   getInterestPayModeOptions,
+  getDepositPeriodTenureError,
   getInterestEarnedLabel,
+  getMinDepositMonthsForInterestPayMode,
   isInterestPayModeReadonly,
   isPeriodicInterestPayMode,
   RENEWAL_REQUIRED_OPTIONS,
@@ -378,6 +380,12 @@ export default function OpenFD() {
     maturityError?.field === 'depositAmount' ? maturityError.message : '';
   const depositPeriodApiError =
     maturityError?.field === 'depositPeriod' ? maturityError.message : '';
+  const depositPeriodTenureError = getDepositPeriodTenureError(
+    form.interestPayMode,
+    form.periodType,
+    form.depositPeriod,
+  );
+  const minDepositMonthsHint = getMinDepositMonthsForInterestPayMode(form.interestPayMode);
 
   const validate = (): boolean => {
     const e: FDErrors = {};
@@ -391,6 +399,7 @@ export default function OpenFD() {
     if (!form.periodType) e.periodType = 'Please select period type';
     if (!form.depositPeriod.trim() || isNaN(Number(form.depositPeriod)) || Number(form.depositPeriod) < 1)
       e.depositPeriod = 'Enter a valid deposit period';
+    else if (depositPeriodTenureError) e.depositPeriod = depositPeriodTenureError;
     else if (depositPeriodApiError) e.depositPeriod = depositPeriodApiError;
     if (canCalculateMaturity && maturityLoading)
       e.depositAmount = e.depositAmount || 'Calculating maturity amount…';
@@ -633,7 +642,7 @@ export default function OpenFD() {
             <label className="form-label">Deposit Period <span className="required">*</span></label>
             <input
               id="fd-depositPeriod"
-              className={`form-input ${errors.depositPeriod || depositPeriodApiError ? 'is-error' : ''}`}
+              className={`form-input ${errors.depositPeriod || depositPeriodTenureError || depositPeriodApiError ? 'is-error' : ''}`}
               placeholder={form.periodType === 'Days' ? 'e.g. 180' : 'e.g. 12'}
               value={form.depositPeriod}
               inputMode="numeric"
@@ -642,8 +651,14 @@ export default function OpenFD() {
             {form.periodType && (
               <p className="form-hint">Enter number of {form.periodType.toLowerCase()}</p>
             )}
-            {(errors.depositPeriod || depositPeriodApiError) && (
-              <p className="form-error">⚠ {errors.depositPeriod || depositPeriodApiError}</p>
+            {minDepositMonthsHint && form.periodType && (
+              <p className="form-hint">
+                Minimum tenure for {form.interestPayMode}: {minDepositMonthsHint} months
+                {form.periodType === 'Days' ? ` (${minDepositMonthsHint * 30} days)` : ''}.
+              </p>
+            )}
+            {(errors.depositPeriod || depositPeriodTenureError || depositPeriodApiError) && (
+              <p className="form-error">⚠ {errors.depositPeriod || depositPeriodTenureError || depositPeriodApiError}</p>
             )}
           </div>
         </div>
@@ -786,6 +801,7 @@ export default function OpenFD() {
           className="btn btn-primary"
           disabled={
             !!debitBalanceError
+            || !!depositPeriodTenureError
             || (canCalculateMaturity && (maturityLoading || !!maturityError || !maturityData))
             || !consent.allAccepted
           }
